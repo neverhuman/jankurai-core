@@ -739,6 +739,7 @@ dependencies = [
  "globset",
  "ignore",
  "indicatif",
+ "jankurai-audit-dedup",
  "jankurai-audit-kernel",
  "jankurai-guard",
  "jankurai-proofbind",
@@ -757,6 +758,20 @@ dependencies = [
  "toml",
  "ureq",
  "walkdir",
+]
+
+[[package]]
+name = "jankurai-audit-dedup"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "jankurai-audit-kernel",
+ "once_cell",
+ "regex",
+ "serde",
+ "sha2",
+ "toml",
 ]
 
 [[package]]
