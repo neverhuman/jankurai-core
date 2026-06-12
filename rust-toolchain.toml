@@ -1,0 +1,6 @@
+# Pinned Rust toolchain so local and CI builds never drift silently.
+# CI installs the same channel and components via dtolnay/rust-toolchain.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

@@ -53,7 +53,7 @@ agent_instruction_hard = 180
 design_doc_hard = 600
 
 [scan]
-excluded_paths = ["tips/"]
+excluded_paths = [".fusion", ".jankurai", "target", "node_modules", "tips/"]
 extra_excluded_paths = ["conformance/fixtures"]
 
 # HLT-046-UNNECESSARY-VARIETY (advisory). `min_instance` is the minimum number of

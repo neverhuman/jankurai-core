@@ -1,6 +1,38 @@
 {
   "workspace": "jankurai-core",
   "tests": {
+    "crates/": {
+      "command": "cargo nextest run --workspace",
+      "purpose": "run the Rust workspace test suite for the jankurai crate"
+    },
+    "Cargo.toml": {
+      "command": "cargo check --workspace --locked",
+      "purpose": "verify the workspace manifest builds with the locked dependency graph"
+    },
+    "Cargo.lock": {
+      "command": "cargo check --workspace --locked",
+      "purpose": "verify the locked dependency graph resolves and stays consistent"
+    },
+    "Justfile": {
+      "command": "bash scripts/ci-local.sh required",
+      "purpose": "verify the root command surface lanes are runnable"
+    },
+    "VERSION": {
+      "command": "bash scripts/ci-local.sh required",
+      "purpose": "verify the declared crate version stays coherent with release metadata"
+    },
+    "CHANGELOG.md": {
+      "command": "bash scripts/ci-local.sh required",
+      "purpose": "verify the changelog tracks released versions"
+    },
+    "README.md": {
+      "command": "bash scripts/ci-local.sh required",
+      "purpose": "verify the root readme routes to the workspace layout"
+    },
+    "LICENSE": {
+      "command": "bash scripts/ci-local.sh required",
+      "purpose": "verify the license file is present and unmodified"
+    },
     "AGENTS.md": {
       "command": "bash scripts/ci-local.sh required",
       "purpose": "verify split-family agent routing remains present"
@@ -17,6 +49,14 @@
       "command": "bash scripts/ci-local.sh required",
       "purpose": "verify split control maps and standard metadata"
     },
+    "docs/": {
+      "command": "bash scripts/ci-local.sh required",
+      "purpose": "verify agent-readable documentation stays present"
+    },
+    "schemas/": {
+      "command": "bash scripts/ci-local.sh required",
+      "purpose": "verify schema contracts stay present and valid"
+    },
     "ops/": {
       "command": "bash scripts/ci-local.sh required",
       "purpose": "verify pinned CI script entrypoints"
@@ -24,6 +64,18 @@
     "scripts/": {
       "command": "bash scripts/ci-local.sh required",
       "purpose": "verify local CI and fusion helpers"
+    },
+    ".github/": {
+      "command": "bash scripts/ci-local.sh required",
+      "purpose": "verify CI workflow entrypoints stay pinned and thin"
+    },
+    "rust-toolchain.toml": {
+      "command": "cargo check --workspace --locked",
+      "purpose": "verify the pinned toolchain channel and components stay consistent"
+    },
+    ".gitignore": {
+      "command": "bash scripts/ci-local.sh required",
+      "purpose": "verify the exclusion list keeps transient build paths untracked"
     },
     ".": {
       "command": "bash scripts/ci-local.sh required",
