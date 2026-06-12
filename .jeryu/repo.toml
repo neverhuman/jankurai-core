@@ -1,0 +1,12 @@
+repo = "root/jankurai-core"
+default_branch = "main"
+
+[shadow_main]
+enabled = true
+remote_url = "git@github.com:neverhuman/jankurai-core.git"
+refs = ["refs/heads/main"]
+
+[tag_mirror]
+enabled = true
+remote_url = "git@github.com:neverhuman/jankurai-core.git"
+tag_pattern = "jankurai-core-v*"
