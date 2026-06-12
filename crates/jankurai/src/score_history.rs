@@ -1,4 +1,4 @@
-#[path = "score_history_impl.rs"]
-pub mod score_history_impl;
-
-pub use self::score_history_impl::*;
+//! Re-export shim: the score-history engine moved to the `jankurai-fleet` crate
+//! (W5 split). Every existing `crate::score_history::X` path keeps resolving
+//! unchanged.
+pub use jankurai_fleet::score_history::*;

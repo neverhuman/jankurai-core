@@ -741,6 +741,7 @@ dependencies = [
  "indicatif",
  "jankurai-audit-dedup",
  "jankurai-audit-kernel",
+ "jankurai-fleet",
  "jankurai-guard",
  "jankurai-proofbind",
  "jankurai-proofmark",
@@ -795,6 +796,18 @@ dependencies = [
  "syn",
  "toml",
  "walkdir",
+]
+
+[[package]]
+name = "jankurai-fleet"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "jankurai-audit-kernel",
+ "serde",
+ "serde_json",
+ "sha2",
+ "toml",
 ]
 
 [[package]]

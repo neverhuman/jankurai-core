@@ -20,6 +20,7 @@ ignore = "0.4"
 indicatif = "0.17"
 jankurai-audit-dedup = { git = "https://github.com/neverhuman/jankurai-tools-dedup.git", tag = "jankurai-tools-dedup-v1.7.0-split.1", package = "jankurai-audit-dedup", version = "0.1.0" }
 jankurai-audit-kernel = { git = "https://github.com/neverhuman/jankurai-tools-kernel.git", tag = "jankurai-tools-kernel-v1.7.0-split.0", package = "jankurai-audit-kernel", version = "0.1.0" }
+jankurai-fleet = { git = "https://github.com/neverhuman/jankurai-tools-fleet.git", tag = "jankurai-tools-fleet-v1.7.0-split.1", package = "jankurai-fleet", version = "0.1.0" }
 jankurai-guard = { git = "https://github.com/neverhuman/jankurai-tools-guard.git", tag = "jankurai-tools-guard-v1.7.0-split.0", package = "jankurai-guard", version = "0.1.0", default-features = false }
 jankurai-proofbind = { git = "https://github.com/neverhuman/jankurai-tools-proof.git", tag = "jankurai-tools-proof-v1.7.0-split.0", package = "jankurai-proofbind", version = "0.8.0" }
 jankurai-proofmark = { git = "https://github.com/neverhuman/jankurai-tools-proof.git", tag = "jankurai-tools-proof-v1.7.0-split.0", package = "jankurai-proofmark", version = "0.8.0" }
