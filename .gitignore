@@ -7,3 +7,6 @@ node_modules/
 test-results/
 .fusion/
 .jankurai/
+
+# local offline-build aid (git url redirects); real CI resolves git-deps normally
+.cargo/

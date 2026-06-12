@@ -765,6 +765,7 @@ dependencies = [
 [[package]]
 name = "jankurai-audit-analyzers"
 version = "0.1.0"
+source = "git+https://github.com/neverhuman/jankurai-tools-analyzers.git?tag=jankurai-tools-analyzers-v1.7.0-split.1#ffcfc9746aa4b7b35bf44528a88c710adb7435ca"
 dependencies = [
  "anyhow",
  "globset",
@@ -786,6 +787,7 @@ dependencies = [
 [[package]]
 name = "jankurai-audit-dedup"
 version = "0.1.0"
+source = "git+https://github.com/neverhuman/jankurai-tools-dedup.git?tag=jankurai-tools-dedup-v1.7.0-split.1#a06d75392ee39352ea564563dc2058f78af466f0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -800,6 +802,7 @@ dependencies = [
 [[package]]
 name = "jankurai-audit-kernel"
 version = "0.1.0"
+source = "git+https://github.com/neverhuman/jankurai-tools-kernel.git?tag=jankurai-tools-kernel-v1.7.0-split.0#4bde9e00df5e699dd49d089c7644f3b5342d0945"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -823,6 +826,7 @@ dependencies = [
 [[package]]
 name = "jankurai-fleet"
 version = "0.1.0"
+source = "git+https://github.com/neverhuman/jankurai-tools-fleet.git?tag=jankurai-tools-fleet-v1.7.0-split.1#0f9790aaa7d244faf041bca2787b875392e534f0"
 dependencies = [
  "anyhow",
  "jankurai-audit-kernel",
@@ -835,6 +839,7 @@ dependencies = [
 [[package]]
 name = "jankurai-guard"
 version = "0.1.0"
+source = "git+https://github.com/neverhuman/jankurai-tools-guard.git?tag=jankurai-tools-guard-v1.7.0-split.0#788ece4d5bb3a6ea4851ece56eca9c8ce58c3d5a"
 dependencies = [
  "anyhow",
  "chrono",
@@ -855,6 +860,7 @@ dependencies = [
 [[package]]
 name = "jankurai-proofbind"
 version = "0.8.0"
+source = "git+https://github.com/neverhuman/jankurai-tools-proof.git?tag=jankurai-tools-proof-v1.7.0-split.0#2dec663edc626d0c3f52336449b48313eae752d8"
 dependencies = [
  "anyhow",
  "serde",
@@ -865,6 +871,7 @@ dependencies = [
 [[package]]
 name = "jankurai-proofmark"
 version = "0.8.0"
+source = "git+https://github.com/neverhuman/jankurai-tools-proof.git?tag=jankurai-tools-proof-v1.7.0-split.0#2dec663edc626d0c3f52336449b48313eae752d8"
 dependencies = [
  "anyhow",
  "jankurai-proofbind",
