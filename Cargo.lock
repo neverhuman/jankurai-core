@@ -739,6 +739,7 @@ dependencies = [
  "globset",
  "ignore",
  "indicatif",
+ "jankurai-audit-analyzers",
  "jankurai-audit-dedup",
  "jankurai-audit-kernel",
  "jankurai-fleet",
@@ -758,6 +759,27 @@ dependencies = [
  "tempfile",
  "toml",
  "ureq",
+ "walkdir",
+]
+
+[[package]]
+name = "jankurai-audit-analyzers"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "globset",
+ "jankurai-audit-dedup",
+ "jankurai-audit-kernel",
+ "once_cell",
+ "quote",
+ "rayon",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "syn",
+ "toml",
  "walkdir",
 ]
 
