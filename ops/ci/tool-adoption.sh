@@ -40,7 +40,7 @@ target/debug/jankurai proofmark rust . --obligations target/jankurai/proofbind/o
 # copy-code: duplication triage replacing ad-hoc copy-code review.
 log "tool-adoption: copy-code"
 lock_before="$(sha256sum Cargo.lock | cut -d' ' -f1)"
-CARGO_NET_OFFLINE=true cargo run -p jankurai -- copy-code . --json target/jankurai/copy-code.json --md target/jankurai/copy-code.md
+CARGO_NET_OFFLINE=true cargo run --locked --offline -p jankurai -- copy-code . --json target/jankurai/copy-code.json --md target/jankurai/copy-code.md
 lock_after="$(sha256sum Cargo.lock | cut -d' ' -f1)"
 [[ "$lock_after" == "$lock_before" ]] || die "copy-code changed Cargo.lock"
 # Adopted artifacts: target/jankurai/copy-code.json target/jankurai/copy-code.md
