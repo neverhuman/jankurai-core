@@ -18,10 +18,16 @@ bootstrap: setup
 
 # Deterministic fast lane: the narrowest proof loop for agent iteration.
 fast:
-    cargo check -p jankurai --locked
-    cargo nextest run -p jankurai
-    cargo run -p jankurai -- audit . --changed-fast --changed Cargo.lock --no-score-history --json target/jankurai/audit-fast.json --md target/jankurai/audit-fast.md
-    jq '{score, raw_score, caps_applied, findings}' target/jankurai/audit-fast.json > target/jankurai/fast-score.json
+    GIT_TERMINAL_PROMPT=0 cargo check -p jankurai --locked --offline
+    GIT_TERMINAL_PROMPT=0 cargo nextest run -p jankurai --locked --offline
+    GIT_TERMINAL_PROMPT=0 cargo run -p jankurai --locked --offline -- audit . --mode advisory --full --no-score-history --fail-under 85 --fail-on high --json target/jankurai/audit-fast.json --md target/jankurai/audit-fast.md
+    jq -e '(.score >= 85) and ((.caps_applied | length) == 0) and (.decision.hard_findings == 0) and (.decision.passed == true)' target/jankurai/audit-fast.json >/dev/null
+    jq '{score, raw_score, caps_applied, findings, decision}' target/jankurai/audit-fast.json > target/jankurai/fast-score.json
+
+# Optional narrow diagnostic. Its partial report is never used as release
+# evidence; `fast` above always finishes with the fail-closed full audit.
+audit-changed path:
+    GIT_TERMINAL_PROMPT=0 cargo run -p jankurai --locked --offline -- audit . --changed-fast --changed "{{path}}" --no-score-history --json target/jankurai/audit-changed.json --md target/jankurai/audit-changed.md
 
 # Run the full local check: format, lint, fast lane, security, and audit.
 check: fmt lint fast security audit
@@ -37,7 +43,7 @@ lint:
 
 # Run the workspace test suite.
 test:
-    cargo nextest run --workspace
+    GIT_TERMINAL_PROMPT=0 cargo nextest run --workspace --locked --offline
 
 # Security lane: secret scanning plus dependency vulnerability scanning.
 # gitleaks scans for committed secrets; cargo audit checks the Rust dependency tree.

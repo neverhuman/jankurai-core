@@ -478,6 +478,45 @@ fn audit_cli_update_notice_can_be_disabled_by_env() {
 }
 
 #[test]
+fn audit_cli_never_live_checks_for_updates_by_default() {
+    let dir = tempdir().unwrap();
+    write_audit_notice_fixture(dir.path());
+    let trace = dir.path().join("git-trace.log");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_jankurai"))
+        .arg("audit")
+        .arg(dir.path())
+        .arg("--mode")
+        .arg("advisory")
+        .arg("--json")
+        .arg(dir.path().join("target/jankurai/repo-score.json"))
+        .arg("--md")
+        .arg(dir.path().join("target/jankurai/repo-score.md"))
+        .env_remove("JANKURAI_TEST_LATEST_VERSION")
+        .env_remove("JANKURAI_NO_UPDATE_CHECK")
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GIT_TRACE", &trace)
+        .output()
+        .expect("spawn jankurai audit");
+
+    assert!(
+        output.status.success(),
+        "audit failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let trace = fs::read_to_string(trace).unwrap_or_default();
+    assert!(
+        !trace.contains("ls-remote"),
+        "unexpected live git check: {trace}"
+    );
+    assert!(!dir
+        .path()
+        .join("target/jankurai/update/state.json")
+        .exists());
+}
+
+#[test]
 fn audit_cli_reuses_fresh_update_state_without_live_check() {
     let dir = tempdir().unwrap();
     write_audit_notice_fixture(dir.path());

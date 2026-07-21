@@ -24,7 +24,7 @@ fn split_core_uses_local_reproducible_ci_entrypoints() {
     assert!(!audit.contains("/home/ubuntu/jankurai-split/jankurai"));
 
     let adoption = fs::read_to_string(root.join("ops/ci/tool-adoption.sh")).unwrap();
-    assert!(adoption.contains("cargo build --locked -p jankurai"));
+    assert!(adoption.contains("cargo build --locked --offline -p jankurai"));
     assert!(adoption.contains("test -x target/debug/jankurai"));
     assert!(adoption.contains("target/debug/jankurai proofbind verify"));
     assert!(adoption.contains("CARGO_NET_OFFLINE=true cargo run -p jankurai -- copy-code"));

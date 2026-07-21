@@ -7,7 +7,12 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 cd "$REPO_ROOT"
 
 log "security lane: local secret, dependency, policy, workflow, SBOM, and vulnerability proof"
-bash tools/security-lane.sh ci
+cargo run --locked --offline -p jankurai -- security run . \
+  --strict \
+  --profile ci \
+  --script tools/security-lane.sh \
+  --out target/jankurai/security/evidence.json
 
+assert_artifact target/jankurai/security/evidence.json
 assert_artifact target/jankurai/security/sbom.json
 assert_artifact target/jankurai/security/provenance-inputs.sha256

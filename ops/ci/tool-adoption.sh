@@ -17,7 +17,7 @@ mkdir -p target/jankurai target/jankurai/security target/jankurai/coverage \
 # Every adopted command must exercise the exact binary built from this commit.
 # Keep the executable path literal below: tool-adoption auditing verifies the
 # command surface, and an array indirection would hide real executions from it.
-cargo build --locked -p jankurai
+cargo build --locked --offline -p jankurai
 test -x target/debug/jankurai
 
 # audit-ci / proof-routing / contract-drift / authz-matrix /
@@ -52,7 +52,7 @@ target/debug/jankurai security run . --out target/jankurai/security/evidence.jso
 
 # ci/git/release bad-behavior: language-level workflow safety tests.
 log "tool-adoption: language bad-behavior tests"
-cargo test -p jankurai --test language_bad_behavior 2>&1 \
+cargo test -p jankurai --test language_bad_behavior --locked --offline 2>&1 \
   | tee target/jankurai/language-bad-behavior.log
 # Adopted artifact: target/jankurai/language-bad-behavior.log
 

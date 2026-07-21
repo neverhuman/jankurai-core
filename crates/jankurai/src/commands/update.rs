@@ -244,6 +244,14 @@ pub fn audit_upgrade_notice(repo: &Path) -> Option<UpgradeNotice> {
         }
     }
 
+    // Audits are evidence production, not update clients. A routine audit
+    // must never initiate network access or credential discovery. The test
+    // override keeps deterministic notice coverage; real live checks remain
+    // available through the explicit `jankurai update --check` command.
+    if std::env::var(TEST_LATEST_VERSION_ENV).is_err() {
+        return None;
+    }
+
     match build_plan(&repo, &args) {
         Ok(plan) => {
             let _ = write_state(&repo, &args, &plan);
