@@ -39,7 +39,7 @@ fmt:
     cargo fmt --all --check
 
 lint:
-    cargo clippy --workspace --all-targets --locked -- -D warnings
+    cargo clippy --workspace --all-targets --locked --offline -- -D warnings
 
 # Run the workspace test suite.
 test:

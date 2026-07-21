@@ -47,7 +47,7 @@ lock_after="$(sha256sum Cargo.lock | cut -d' ' -f1)"
 
 # security: secret + dependency + SBOM/provenance evidence in one lane.
 log "tool-adoption: security run"
-target/debug/jankurai security run . --out target/jankurai/security/evidence.json
+target/debug/jankurai security run . --strict --profile ci --script tools/security-lane.sh --out target/jankurai/security/evidence.json
 # Adopted artifact: target/jankurai/security/evidence.json
 
 # ci/git/release bad-behavior: language-level workflow safety tests.

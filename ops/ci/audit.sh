@@ -7,7 +7,7 @@ cd "$REPO_ROOT"
 
 mkdir -p .jankurai
 log "audit lane: exact-source full audit -> .jankurai/repo-score.{json,md}"
-cargo run --locked -p jankurai -- audit . \
+cargo run --locked --offline -p jankurai -- audit . \
   --full \
   --baseline agent/baselines/main.repo-score.json \
   --no-score-history \

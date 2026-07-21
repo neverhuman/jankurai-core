@@ -7,5 +7,5 @@ cd "$REPO_ROOT"
 log "required lane: locked metadata, format, lint, and mapped fast proof"
 cargo metadata --locked --offline --no-deps --format-version 1 >/dev/null
 cargo fmt --all --check
-cargo clippy -p jankurai --all-targets --locked -- -D warnings
+cargo clippy -p jankurai --all-targets --locked --offline -- -D warnings
 bash ops/ci/fast.sh

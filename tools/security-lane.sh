@@ -37,8 +37,8 @@ if [[ -f Cargo.toml ]]; then
     printf '[security] Rust dependency and policy scans\n'
     run_step cargo-audit cargo-audit 'cargo audit --no-fetch' false \
         cargo audit --no-fetch
-    run_step cargo-deny cargo-deny 'cargo deny check advisories bans sources' false \
-        cargo deny check advisories bans sources
+    run_step cargo-deny cargo-deny 'cargo deny check --disable-fetch advisories bans sources' false \
+        cargo deny check --disable-fetch advisories bans sources
 fi
 
 if [[ -f package.json ]]; then
