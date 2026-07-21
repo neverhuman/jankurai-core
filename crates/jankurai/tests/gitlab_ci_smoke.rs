@@ -28,7 +28,9 @@ fn split_core_uses_local_reproducible_ci_entrypoints() {
     assert!(adoption.contains("test -x target/debug/jankurai"));
     assert!(adoption.contains("target/debug/jankurai proofbind verify"));
     assert!(adoption.contains("CARGO_NET_OFFLINE=true cargo run -p jankurai -- copy-code"));
-    assert!(adoption.contains("security run . --strict --profile ci --script tools/security-lane.sh"));
+    assert!(
+        adoption.contains("security run . --strict --profile ci --script tools/security-lane.sh")
+    );
     assert!(adoption.contains("copy-code changed Cargo.lock"));
     assert!(!adoption.contains("\"${JANKURAI[@]}\""));
     assert!(adoption.contains("target/jankurai/accepted-baseline.json"));
