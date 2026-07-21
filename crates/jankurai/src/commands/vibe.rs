@@ -134,7 +134,12 @@ pub fn run_coverage(args: VibeCoverageArgs) -> Result<()> {
 }
 
 pub fn audit_summary(root: &Path) -> Option<VibeCoverageSummary> {
-    build_report(root, "agent/vibe-coverage.toml", "tips/vibe_coding")
+    let inventory = if root.join("agent/vibe-source-inventory.toml").is_file() {
+        "agent/vibe-source-inventory.toml"
+    } else {
+        "tips/vibe_coding"
+    };
+    build_report(root, "agent/vibe-coverage.toml", inventory)
         .ok()
         .map(|report| report.summary())
 }
@@ -375,7 +380,9 @@ fn validate_source_shape(
             let Some(expected_title) = expected_rows.get(source_ref) else {
                 continue;
             };
-            if normalize_title(&issue.name) != normalize_title(expected_title) {
+            if !expected_title.is_empty()
+                && normalize_title(&issue.name) != normalize_title(expected_title)
+            {
                 bail!(
                     "{} source_ref {} title mismatch: source `{}` != entry `{}`",
                     issue.id,
@@ -444,16 +451,53 @@ fn validate_source_shape(
     Ok(())
 }
 
-fn parse_tip_rows(tips_dir: &Path) -> Result<BTreeMap<String, String>> {
+fn parse_tip_rows(source: &Path) -> Result<BTreeMap<String, String>> {
+    if source.is_file() {
+        return parse_tip_inventory(source);
+    }
+
     let row_re = Regex::new(r"^\|\s*(\d+)\s*\|\s*(.+?)\s*\|")?;
     let mut refs = BTreeMap::new();
     for tip in 1..=5 {
-        let file = tips_dir.join(format!("tip{tip}.txt"));
+        let file = source.join(format!("tip{tip}.txt"));
         let text = fs::read_to_string(&file).with_context(|| format!("read {}", file.display()))?;
         for line in text.lines() {
             if let Some(caps) = row_re.captures(line) {
                 refs.insert(format!("tip{tip}:{}", &caps[1]), normalize_cell(&caps[2]));
             }
+        }
+    }
+    Ok(refs)
+}
+
+#[derive(Debug, Deserialize)]
+struct TipInventory {
+    schema_version: String,
+    tips: BTreeMap<String, usize>,
+}
+
+fn parse_tip_inventory(path: &Path) -> Result<BTreeMap<String, String>> {
+    let text = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+    let inventory: TipInventory =
+        toml::from_str(&text).with_context(|| format!("parse {}", path.display()))?;
+    if inventory.schema_version != "1.0.0" {
+        bail!("{} schema_version must be 1.0.0", path.display());
+    }
+    let expected_keys = (1..=5)
+        .map(|tip| format!("tip{tip}"))
+        .collect::<BTreeSet<_>>();
+    let actual_keys = inventory.tips.keys().cloned().collect::<BTreeSet<_>>();
+    if actual_keys != expected_keys {
+        bail!("{} must declare exactly tip1 through tip5", path.display());
+    }
+
+    let mut refs = BTreeMap::new();
+    for (tip, row_count) in inventory.tips {
+        if row_count == 0 {
+            bail!("{} declares an empty {tip}", path.display());
+        }
+        for row in 1..=row_count {
+            refs.insert(format!("{tip}:{row}"), String::new());
         }
     }
     Ok(refs)

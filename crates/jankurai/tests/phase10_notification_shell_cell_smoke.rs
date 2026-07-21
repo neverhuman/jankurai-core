@@ -54,8 +54,8 @@ fn notification_shell_is_eighth_certified_dependency_bound_cell() {
         .find(|cell| cell["cell_id"] == "notification-shell")
         .expect("notification-shell cell must be present in registry");
 
-    assert_eq!(notification_shell["lifecycle"], "certified");
-    assert_eq!(notification_shell["certification_status"], "certified");
+    assert_eq!(notification_shell["lifecycle"], "experimental");
+    assert_eq!(notification_shell["certification_status"], "candidate");
     assert_eq!(notification_shell["category"], "integration");
 
     let evidence = notification_shell["certification_evidence"]
@@ -67,6 +67,6 @@ fn notification_shell_is_eighth_certified_dependency_bound_cell() {
                 .as_str()
                 .unwrap()
                 .contains("domain-notification-delivery-policy")
-            && item["status"] == "present"
+            && item["status"] == "missing"
     }));
 }

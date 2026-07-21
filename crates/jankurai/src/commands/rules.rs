@@ -140,12 +140,9 @@ pub fn build_verify_report(repo: &Path) -> Result<RuleVerifyReport> {
         .cloned()
         .collect();
     let standard = fs::read_to_string(repo.join("agent/JANKURAI_STANDARD.md")).unwrap_or_default();
-    let native = fs::read_to_string(repo.join("docs/agent-native-standard.md")).unwrap_or_default();
     let missing_from_standard: Vec<String> = known
         .iter()
-        .filter(|rule_id| {
-            !standard.contains(rule_id.as_str()) || !native.contains(rule_id.as_str())
-        })
+        .filter(|rule_id| !standard.contains(rule_id.as_str()))
         .cloned()
         .collect();
     let scanned_files = references

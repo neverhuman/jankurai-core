@@ -108,3 +108,47 @@ version = "{ver}"
 
     check_versions(dir.path()).unwrap();
 }
+
+#[test]
+fn split_core_versions_validate_without_hub_owned_artifacts() {
+    let dir = tempdir().unwrap();
+    fs::write(
+        dir.path().join("VERSION"),
+        format!("{}\n", env!("CARGO_PKG_VERSION")),
+    )
+    .unwrap();
+    fs::create_dir_all(dir.path().join("crates/jankurai")).unwrap();
+    fs::write(
+        dir.path().join("crates/jankurai/Cargo.toml"),
+        format!(
+            "[package]\nname = \"jankurai\"\nversion = \"{}\"\n",
+            env!("CARGO_PKG_VERSION")
+        ),
+    )
+    .unwrap();
+    fs::create_dir_all(dir.path().join("agent")).unwrap();
+    fs::write(
+        dir.path().join("agent/standard-version.toml"),
+        format!(
+            r#"
+standard = "jankurai"
+standard_version = "0.9.0"
+paper_edition = "2026.05-ed8"
+auditor_version = "{}"
+schema_version = "{}"
+target_stack = "rust-ts-vite-react-postgres-bounded-python"
+split_member = "jankurai-core"
+"#,
+            jankurai::model::AUDITOR_VERSION,
+            SCHEMA_VERSION,
+        ),
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("agent/JANKURAI_STANDARD.md"),
+        "Standard version: `0.9.0`\n",
+    )
+    .unwrap();
+
+    check_versions(dir.path()).unwrap();
+}

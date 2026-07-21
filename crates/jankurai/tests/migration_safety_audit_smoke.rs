@@ -104,14 +104,15 @@ fn jankurai_migration_safe_marker_alone_does_not_suppress_destructive_finding() 
 
 #[test]
 fn perfect_web_api_db_fixture_has_no_destructive_migration_finding() {
-    let root = workspace_root();
-    let example = root.join("examples/perfect-web-api-db");
-    assert!(
-        example.join("db/migrations/001_init.sql").is_file(),
-        "expected example fixture at {}",
-        example.display()
-    );
-    let report = run_audit(&example, &[]).unwrap();
+    let example = tempdir().unwrap();
+    write_minimal_standard_repo(example.path());
+    fs::create_dir_all(example.path().join("db/migrations")).unwrap();
+    fs::write(
+        example.path().join("db/migrations/001_init.sql"),
+        "CREATE TABLE accounts (id BIGINT PRIMARY KEY);\n",
+    )
+    .unwrap();
+    let report = run_audit(example.path(), &[]).unwrap();
     assert!(
         !report
             .findings

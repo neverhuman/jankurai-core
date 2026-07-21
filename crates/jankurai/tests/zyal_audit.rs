@@ -44,7 +44,6 @@ fn seed_standard(repo: &Path) {
         "agent/JANKURAI_STANDARD.md",
         "agent/owner-map.json",
         "agent/test-map.json",
-        "docs/agent-native-standard.md",
     ] {
         copy_repo_file(repo, rel);
     }

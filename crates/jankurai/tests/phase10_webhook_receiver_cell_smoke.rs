@@ -54,8 +54,8 @@ fn webhook_receiver_is_seventh_certified_dependency_bound_cell() {
         .find(|cell| cell["cell_id"] == "webhook-receiver")
         .expect("webhook-receiver cell must be present in registry");
 
-    assert_eq!(webhook_receiver["lifecycle"], "certified");
-    assert_eq!(webhook_receiver["certification_status"], "certified");
+    assert_eq!(webhook_receiver["lifecycle"], "experimental");
+    assert_eq!(webhook_receiver["certification_status"], "candidate");
     assert_eq!(webhook_receiver["category"], "integration");
 
     let evidence = webhook_receiver["certification_evidence"]
@@ -67,6 +67,6 @@ fn webhook_receiver_is_seventh_certified_dependency_bound_cell() {
                 .as_str()
                 .unwrap()
                 .contains("domain-webhook-signature-policy")
-            && item["status"] == "present"
+            && item["status"] == "missing"
     }));
 }

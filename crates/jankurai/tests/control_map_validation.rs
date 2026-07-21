@@ -28,14 +28,14 @@ fn canonical_test_map_validates_with_strict_json_parsing() {
 }
 
 #[test]
-fn local_jeryu_shadow_config_is_present_and_routed() {
+fn local_jeryu_repository_config_is_present_and_routed() {
     let repo = repo_root();
-    let text = fs::read_to_string(repo.join(".jeryu/local/repos/jankurai.toml"))
-        .expect("read local Jeryu shadow config");
+    let text = fs::read_to_string(repo.join(".jeryu/repo.toml"))
+        .expect("read local Jeryu repository config");
 
-    assert!(text.contains("repo = \"root/jankurai\""));
-    assert!(text.contains("remote_url = \"git@github.com:neverhuman/jankurai.git\""));
-    assert!(text.contains("refs = [\"refs/heads/main\"]"));
+    assert!(text.contains("repo = \"root/jankurai-core\""));
+    assert!(text.contains("default_branch = \"main\""));
+    assert!(text.contains("tag_pattern = \"jankurai-core-v*\""));
 }
 
 #[test]

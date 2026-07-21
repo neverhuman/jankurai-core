@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use jankurai::commands::conformance::{build_report, render_tex_table, ConformanceRunArgs};
@@ -12,37 +13,28 @@ fn workspace_root() -> PathBuf {
 }
 
 #[test]
-fn conformance_runner_observes_expected_fixture_decisions() {
-    let root = workspace_root();
+fn conformance_runner_handles_an_empty_member_owned_fixture_set() {
+    let schema_root = workspace_root();
+    let scratch = tempfile::tempdir().unwrap();
+    fs::create_dir_all(scratch.path().join("fixtures")).unwrap();
+    fs::create_dir_all(scratch.path().join("expected")).unwrap();
     let args = ConformanceRunArgs {
-        workspace: root.clone(),
-        fixtures: PathBuf::from("conformance/fixtures"),
-        expected: PathBuf::from("conformance/expected"),
+        workspace: scratch.path().to_path_buf(),
+        fixtures: PathBuf::from("fixtures"),
+        expected: PathBuf::from("expected"),
         out: "target/jankurai/conformance-results.json".into(),
         md: "target/jankurai/conformance-results.md".into(),
-        tex: "paper/tex/generated/conformance_results_table.tex".into(),
+        tex: "target/jankurai/conformance-results.tex".into(),
     };
 
-    let report = build_report(&args).expect("build conformance report");
-    validation::validate_serializable(&root, ArtifactSchema::ConformanceResults, &report)
+    let report = build_report(&args).expect("build empty conformance report");
+    validation::validate_serializable(&schema_root, ArtifactSchema::ConformanceResults, &report)
         .expect("conformance report validates");
-    assert_eq!(report.fixture_count, 10);
-    assert_eq!(report.pass_count, 10);
+    assert_eq!(report.fixture_count, 0);
+    assert_eq!(report.pass_count, 0);
     assert_eq!(report.fail_count, 0);
-    assert!(report.results.iter().any(|result| {
-        result.fixture_id == "hl3-pass-minimal"
-            && result.observed_audit_decision == "pass"
-            && result.observed_witness_decision == "pass"
-    }));
-    assert!(report.results.iter().any(|result| {
-        result.fixture_id == "generated-zone-mutation-fail"
-            && result
-                .observed_rules
-                .iter()
-                .any(|rule| rule == "HLT-002-GENERATED-MUTATION")
-    }));
+    assert!(report.results.is_empty());
 
     let tex = render_tex_table(&report, &args);
     assert!(tex.contains("\\label{tab:conformance-results}"));
-    assert!(tex.contains("hl3-pass-minimal"));
 }

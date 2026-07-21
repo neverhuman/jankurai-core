@@ -88,7 +88,6 @@ fn write_audit_surface(repo: &Path) {
         "agent/proof-lanes.toml",
         "agent/tool-adoption.toml",
         "agent/JANKURAI_STANDARD.md",
-        "docs/agent-native-standard.md",
     ] {
         fs::copy(repo_root().join(rel), repo.join(rel)).unwrap();
     }

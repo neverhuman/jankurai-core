@@ -1,7 +1,5 @@
-use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
-use std::io::{self, IsTerminal};
+use std::io::{self, IsTerminal, Write};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
 
 pub enum Style {
     Heading,
@@ -65,7 +63,7 @@ pub fn status(style: Style, label: &str, message: impl AsRef<str>) {
 }
 
 pub struct CliProgress {
-    bar: Option<ProgressBar>,
+    interactive: bool,
     forced_lines: bool,
     len: u64,
     pos: AtomicU64,
@@ -78,7 +76,7 @@ impl CliProgress {
         if force && !io::stderr().is_terminal() {
             status(Style::Accent, "progress", label);
             return Self {
-                bar: None,
+                interactive: false,
                 forced_lines: true,
                 len,
                 pos: AtomicU64::new(0),
@@ -86,28 +84,14 @@ impl CliProgress {
         }
         if !force && !progress_enabled() {
             return Self {
-                bar: None,
+                interactive: false,
                 forced_lines: false,
                 len,
                 pos: AtomicU64::new(0),
             };
         }
-        let bar = if force {
-            ProgressBar::with_draw_target(Some(len), ProgressDrawTarget::stderr_with_hz(20))
-        } else {
-            ProgressBar::new(len)
-        };
-        let style = ProgressStyle::with_template(
-            "{spinner:.magenta} [{elapsed_precise}] {bar:36.cyan/blue} {pos:>2}/{len:2} {msg}",
-        )
-        .unwrap()
-        .progress_chars("=>-")
-        .tick_strings(&["-", "\\", "|", "/"]);
-        bar.set_style(style);
-        bar.set_message(label.to_string());
-        bar.enable_steady_tick(Duration::from_millis(60));
         Self {
-            bar: Some(bar),
+            interactive: true,
             forced_lines: false,
             len,
             pos: AtomicU64::new(0),
@@ -116,14 +100,14 @@ impl CliProgress {
 
     pub fn tick(&self, message: impl Into<String>) {
         let message = message.into();
+        let pos = self.pos.fetch_add(1, Ordering::Relaxed) + 1;
         if self.forced_lines {
-            let pos = self.pos.fetch_add(1, Ordering::Relaxed) + 1;
             eprintln!("{}", forced_progress_line(pos, self.len, &message));
             return;
         }
-        if let Some(bar) = &self.bar {
-            bar.set_message(message);
-            bar.inc(1);
+        if self.interactive {
+            eprint!("\r{}\x1b[K", forced_progress_line(pos, self.len, &message));
+            let _ = io::stderr().flush();
         }
     }
 
@@ -133,8 +117,12 @@ impl CliProgress {
             eprintln!("{}", forced_progress_line(self.len, self.len, &message));
             return;
         }
-        if let Some(bar) = &self.bar {
-            bar.finish_with_message(message);
+        if self.interactive {
+            self.pos.store(self.len, Ordering::Relaxed);
+            eprintln!(
+                "\r{}\x1b[K",
+                forced_progress_line(self.len, self.len, &message)
+            );
         }
     }
 }

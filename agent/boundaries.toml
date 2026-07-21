@@ -7,6 +7,11 @@
 id = "rust-ts-vite-react-postgres-bounded-python"
 version = "0.5.0"
 
+[queues]
+adapter_paths = []
+event_contract_paths = []
+generated_type_paths = []
+
 [rust]
 domain_paths = ["crates/jankurai/src/domain"]
 forbidden_domain_imports = [

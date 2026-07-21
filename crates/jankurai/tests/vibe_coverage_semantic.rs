@@ -37,6 +37,12 @@ struct Expected {
     coverage: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct SourceInventory {
+    schema_version: String,
+    tips: BTreeMap<String, usize>,
+}
+
 #[test]
 fn reviewed_mapping_has_expected_counts_and_no_gaps() {
     let repo = repo_root();
@@ -65,19 +71,14 @@ fn reviewed_mapping_has_expected_counts_and_no_gaps() {
     assert_eq!(seen.len(), 260);
     assert!(duplicate_refs.is_empty(), "duplicates: {duplicate_refs:?}");
 
-    let expected_refs = (1..=5)
-        .flat_map(|tip| {
-            let text =
-                fs::read_to_string(repo.join(format!("tips/vibe_coding/tip{tip}.txt"))).unwrap();
-            text.lines()
-                .filter_map(move |line| {
-                    line.strip_prefix('|')
-                        .and_then(|rest| rest.split('|').next())
-                        .and_then(|cell| cell.trim().parse::<usize>().ok())
-                        .map(move |row| format!("tip{tip}:{row}"))
-                })
-                .collect::<Vec<_>>()
-        })
+    let inventory: SourceInventory =
+        toml::from_str(&fs::read_to_string(repo.join("agent/vibe-source-inventory.toml")).unwrap())
+            .unwrap();
+    assert_eq!(inventory.schema_version, "1.0.0");
+    let expected_refs = inventory
+        .tips
+        .iter()
+        .flat_map(|(tip, row_count)| (1..=*row_count).map(move |row| format!("{tip}:{row}")))
         .collect::<BTreeSet<_>>();
     assert_eq!(expected_refs.len(), 260);
     assert_eq!(seen.keys().cloned().collect::<BTreeSet<_>>(), expected_refs);

@@ -6,8 +6,23 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 cd "$REPO_ROOT"
 
 mkdir -p .jankurai
-log "audit lane: jankurai audit -> .jankurai/repo-score.{json,md}"
-jankurai audit . --no-score-history --json .jankurai/repo-score.json --md .jankurai/repo-score.md
+log "audit lane: exact-source full audit -> .jankurai/repo-score.{json,md}"
+cargo run --locked -p jankurai -- audit . \
+  --full \
+  --baseline agent/baselines/main.repo-score.json \
+  --no-score-history \
+  --fail-under 85 \
+  --fail-on high \
+  --json .jankurai/repo-score.json \
+  --md .jankurai/repo-score.md
+
+jq -e --slurpfile baseline agent/baselines/main.repo-score.json '
+  .score >= ($baseline[0].score)
+  and .raw_score >= ($baseline[0].raw_score)
+  and ((.caps_applied | length) == 0)
+  and (.decision.hard_findings == 0)
+  and (.decision.passed == true)
+' .jankurai/repo-score.json >/dev/null
 
 assert_artifact .jankurai/repo-score.json
 assert_artifact .jankurai/repo-score.md

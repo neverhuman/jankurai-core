@@ -6,6 +6,8 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 cd "$REPO_ROOT"
 
-log "security lane: gitleaks + cargo audit"
-gitleaks detect --source . --no-banner --redact
-cargo audit
+log "security lane: local secret, dependency, policy, workflow, SBOM, and vulnerability proof"
+bash tools/security-lane.sh ci
+
+assert_artifact target/jankurai/security/sbom.json
+assert_artifact target/jankurai/security/provenance-inputs.sha256

@@ -47,24 +47,9 @@ pub fn check_versions(repo: &Path) -> Result<()> {
 
     assert_contains(root.join("VERSION"), auditor_version.as_str(), "VERSION")?;
     assert_contains(
-        root.join("docs/agent-native-standard.md"),
-        &format!("Standard version: `{}`", STANDARD_VERSION),
-        "docs/agent-native-standard.md",
-    )?;
-    assert_contains(
         root.join("agent/JANKURAI_STANDARD.md"),
         &format!("Standard version: `{}`", STANDARD_VERSION),
         "agent/JANKURAI_STANDARD.md",
-    )?;
-    assert_contains(
-        root.join("paper/jankurai.md"),
-        &format!("Paper edition: `{}`", PAPER_EDITION),
-        "paper/jankurai.md",
-    )?;
-    assert_contains(
-        root.join("paper/jankurai.md"),
-        &format!("Standard version: `{}`", STANDARD_VERSION),
-        "paper/jankurai.md",
     )?;
 
     let pkg = root.join("crates/jankurai/Cargo.toml");
@@ -77,17 +62,36 @@ pub fn check_versions(repo: &Path) -> Result<()> {
         "crates/jankurai/Cargo.toml package.version",
     )?;
 
-    let ux_pkg = root.join("packages/ux-qa/package.json");
-    let ux_text = fs::read_to_string(&ux_pkg)?;
-    let ux_val: JsonValue = serde_json::from_str(&ux_text)?;
-    let ux_version = ux_val
-        .get("version")
-        .and_then(|value| value.as_str())
-        .ok_or_else(|| anyhow!("missing packages/ux-qa/package.json version"))?;
-    if ux_version != AUDITOR_VERSION {
-        return Err(anyhow!(
-            "packages/ux-qa/package.json version: expected {AUDITOR_VERSION}, got {ux_version}"
-        ));
+    let split_member = manifest.get("split_member").and_then(toml::Value::as_str);
+    if split_member != Some("jankurai-core") {
+        assert_contains(
+            root.join("docs/agent-native-standard.md"),
+            &format!("Standard version: `{}`", STANDARD_VERSION),
+            "docs/agent-native-standard.md",
+        )?;
+        assert_contains(
+            root.join("paper/jankurai.md"),
+            &format!("Paper edition: `{}`", PAPER_EDITION),
+            "paper/jankurai.md",
+        )?;
+        assert_contains(
+            root.join("paper/jankurai.md"),
+            &format!("Standard version: `{}`", STANDARD_VERSION),
+            "paper/jankurai.md",
+        )?;
+
+        let ux_pkg = root.join("packages/ux-qa/package.json");
+        let ux_text = fs::read_to_string(&ux_pkg)?;
+        let ux_val: JsonValue = serde_json::from_str(&ux_text)?;
+        let ux_version = ux_val
+            .get("version")
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| anyhow!("missing packages/ux-qa/package.json version"))?;
+        if ux_version != AUDITOR_VERSION {
+            return Err(anyhow!(
+                "packages/ux-qa/package.json version: expected {AUDITOR_VERSION}, got {ux_version}"
+            ));
+        }
     }
 
     if standard_version != STANDARD_VERSION

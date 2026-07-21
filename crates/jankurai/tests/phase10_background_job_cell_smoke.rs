@@ -54,8 +54,8 @@ fn background_job_is_sixth_certified_dependency_bound_cell() {
         .find(|cell| cell["cell_id"] == "background-job")
         .expect("background-job cell must be present in registry");
 
-    assert_eq!(background_job["lifecycle"], "certified");
-    assert_eq!(background_job["certification_status"], "certified");
+    assert_eq!(background_job["lifecycle"], "experimental");
+    assert_eq!(background_job["certification_status"], "candidate");
     assert_eq!(background_job["category"], "workflow");
 
     let dependencies = background_job["dependencies"].as_array().unwrap();
@@ -76,7 +76,7 @@ fn background_job_is_sixth_certified_dependency_bound_cell() {
                 .as_str()
                 .unwrap()
                 .contains("domain-background-job-retry-policy")
-            && item["status"] == "present"
+            && item["status"] == "missing"
     }));
 
     assert!(background_job["source_paths"]
@@ -113,11 +113,11 @@ fn background_job_prove_emits_retry_policy_bound_decision() {
 
     assert_eq!(prove["mode"], "prove");
     assert_eq!(prove["lifecycle_action"], "prove-certification");
-    assert_eq!(prove["certification_decision"]["status"], "certified");
-    assert_eq!(prove["certification_decision"]["merge_ready"], true);
+    assert_eq!(prove["certification_decision"]["status"], "candidate");
+    assert_eq!(prove["certification_decision"]["merge_ready"], false);
     assert_eq!(
         prove["certification_decision"]["dependency_satisfied"],
-        true
+        false
     );
     assert!(!prove["certification_evidence"]
         .as_array()

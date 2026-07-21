@@ -28,7 +28,7 @@ fn run_vibe_coverage(repo: &Path, out_dir: &Path) -> Value {
         .arg("--source")
         .arg("agent/vibe-coverage.toml")
         .arg("--tips")
-        .arg("tips/vibe_coding")
+        .arg("agent/vibe-source-inventory.toml")
         .arg("--json")
         .arg(&json)
         .arg("--md")
@@ -118,7 +118,7 @@ fn validate_subcommand_fails_no_rows() {
         .arg("--source")
         .arg("agent/vibe-coverage.toml")
         .arg("--tips")
-        .arg("tips/vibe_coding")
+        .arg("agent/vibe-source-inventory.toml")
         .output()
         .expect("spawn jankurai vibe validate");
     assert!(

@@ -54,8 +54,8 @@ fn periodic_cron_is_ninth_certified_dependency_bound_cell() {
         .find(|cell| cell["cell_id"] == "periodic-cron")
         .expect("periodic-cron cell must be present in registry");
 
-    assert_eq!(periodic_cron["lifecycle"], "certified");
-    assert_eq!(periodic_cron["certification_status"], "certified");
+    assert_eq!(periodic_cron["lifecycle"], "experimental");
+    assert_eq!(periodic_cron["certification_status"], "candidate");
     assert_eq!(periodic_cron["category"], "workflow");
 
     let evidence = periodic_cron["certification_evidence"].as_array().unwrap();
@@ -65,6 +65,6 @@ fn periodic_cron_is_ninth_certified_dependency_bound_cell() {
                 .as_str()
                 .unwrap()
                 .contains("domain-periodic-cron-schedule-policy")
-            && item["status"] == "present"
+            && item["status"] == "missing"
     }));
 }

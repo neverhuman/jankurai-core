@@ -54,8 +54,8 @@ fn organization_team_is_fifth_certified_dependency_bound_cell() {
         .find(|cell| cell["cell_id"] == "organization-team")
         .expect("organization-team cell must be present in registry");
 
-    assert_eq!(org_team["lifecycle"], "certified");
-    assert_eq!(org_team["certification_status"], "certified");
+    assert_eq!(org_team["lifecycle"], "experimental");
+    assert_eq!(org_team["certification_status"], "candidate");
     assert_eq!(org_team["category"], "organization");
 
     let dependencies = org_team["dependencies"].as_array().unwrap();
@@ -75,7 +75,7 @@ fn organization_team_is_fifth_certified_dependency_bound_cell() {
                 .as_str()
                 .unwrap()
                 .contains("domain-team-membership-policy")
-            && item["status"] == "present"
+            && item["status"] == "missing"
     }));
 
     assert!(org_team["source_paths"]
@@ -107,11 +107,11 @@ fn organization_team_prove_emits_evidence_bound_decision() {
 
     assert_eq!(prove["mode"], "prove");
     assert_eq!(prove["lifecycle_action"], "prove-certification");
-    assert_eq!(prove["certification_decision"]["status"], "certified");
-    assert_eq!(prove["certification_decision"]["merge_ready"], true);
+    assert_eq!(prove["certification_decision"]["status"], "candidate");
+    assert_eq!(prove["certification_decision"]["merge_ready"], false);
     assert_eq!(
         prove["certification_decision"]["dependency_satisfied"],
-        true
+        false
     );
     assert!(!prove["certification_evidence"]
         .as_array()

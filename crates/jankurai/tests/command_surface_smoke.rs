@@ -191,7 +191,8 @@ fn new_planner_commands_emit_stable_json_and_markdown() {
     validation::validate_serializable(repo.path(), ArtifactSchema::BenchmarkSuite, &suite).unwrap();
     assert_eq!(bench["suite_id"], "smoke");
     assert!(bench["results"].as_array().unwrap().len() >= 2);
-    assert!(bench["summary"]["passed"].as_i64().unwrap() >= 1);
+    assert_eq!(bench["summary"]["passed"], 0);
+    assert_eq!(bench["summary"]["inconclusive"], 2);
     assert!(bench_md.starts_with("# jankurai Benchmark Report"));
     validation::validate_value(repo.path(), ArtifactSchema::BenchmarkReport, &bench).unwrap();
 
@@ -527,7 +528,7 @@ read_only = false
 }
 
 #[test]
-fn certified_cells_are_schema_valid_and_evidence_bound() {
+fn split_core_cells_fail_closed_without_external_example_sources() {
     let repo = repo_root();
 
     let (registry, _registry_md) = run_command(&repo, &["registry"]);
@@ -545,14 +546,14 @@ fn certified_cells_are_schema_valid_and_evidence_bound() {
         .iter()
         .find(|cell| cell["cell_id"] == "rbac")
         .expect("rbac cell");
-    assert_eq!(audit_log["certification_status"], "certified");
+    assert_eq!(audit_log["certification_status"], "candidate");
     assert!(audit_log["proof_lanes"]
         .as_array()
         .unwrap()
         .iter()
         .any(|lane| lane == "audit"));
     assert_eq!(crud["dependencies"].as_array().unwrap()[0], "audit-log");
-    assert_eq!(rbac["certification_status"], "certified");
+    assert_eq!(rbac["certification_status"], "candidate");
     assert_eq!(rbac["dependencies"].as_array().unwrap()[0], "crud-resource");
     assert!(rbac["proof_lanes"]
         .as_array()
@@ -582,15 +583,15 @@ fn certified_cells_are_schema_valid_and_evidence_bound() {
     validation::validate_value(&repo, ArtifactSchema::CellManifest, &rbac_prove["manifest"])
         .unwrap();
     assert_eq!(rbac_prove["manifest"]["cell_id"], "rbac");
-    assert_eq!(rbac_prove["manifest"]["certification_status"], "certified");
+    assert_eq!(rbac_prove["manifest"]["certification_status"], "candidate");
 
-    // Auth-session cell: fourth certified cell with dependency-bound evidence
+    // Built-in cells remain visible but cannot certify without their source evidence.
     let auth_session = cells
         .iter()
         .find(|cell| cell["cell_id"] == "auth-session")
         .expect("auth-session cell");
-    assert_eq!(auth_session["certification_status"], "certified");
-    assert_eq!(auth_session["lifecycle"], "certified");
+    assert_eq!(auth_session["certification_status"], "candidate");
+    assert_eq!(auth_session["lifecycle"], "experimental");
     assert_eq!(auth_session["category"], "identity");
     assert!(auth_session["dependencies"]
         .as_array()
@@ -621,16 +622,16 @@ fn certified_cells_are_schema_valid_and_evidence_bound() {
     assert_eq!(auth_session_prove["manifest"]["cell_id"], "auth-session");
     assert_eq!(
         auth_session_prove["manifest"]["certification_status"],
-        "certified"
+        "candidate"
     );
 
-    // Background-job cell: sixth certified cell with retry policy marker evidence.
+    // Missing external marker evidence must keep the background-job cell fenced.
     let background_job = cells
         .iter()
         .find(|cell| cell["cell_id"] == "background-job")
         .expect("background-job cell");
-    assert_eq!(background_job["certification_status"], "certified");
-    assert_eq!(background_job["lifecycle"], "certified");
+    assert_eq!(background_job["certification_status"], "candidate");
+    assert_eq!(background_job["lifecycle"], "experimental");
     assert_eq!(background_job["category"], "workflow");
     assert!(background_job["dependencies"]
         .as_array()
@@ -644,7 +645,7 @@ fn certified_cells_are_schema_valid_and_evidence_bound() {
         .any(|e| {
             e["kind"] == "content-marker"
                 && e["path"] == "domain-background-job-retry-policy"
-                && e["status"] == "present"
+                && e["status"] == "missing"
         }));
 }
 

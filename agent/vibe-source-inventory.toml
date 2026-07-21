@@ -1,0 +1,11 @@
+# Canonical source-row inventory retained by the split core. The hub-owned
+# human-readable tip documents are not duplicated here; their reviewed row
+# identities remain independently enumerable so coverage gaps fail closed.
+schema_version = "1.0.0"
+
+[tips]
+tip1 = 60
+tip2 = 50
+tip3 = 50
+tip4 = 50
+tip5 = 50

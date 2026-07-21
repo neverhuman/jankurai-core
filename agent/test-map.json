@@ -1,6 +1,54 @@
 {
   "workspace": "jankurai-core",
   "tests": {
+    "crates/jankurai/tests/language_bad_behavior.rs": {
+      "command": "cargo test -p jankurai --test language_bad_behavior",
+      "purpose": "exercise every language bad-behavior detector fixture"
+    },
+    "crates/jankurai/tests/fixtures/language_bad_behavior/": {
+      "command": "cargo test -p jankurai --test language_bad_behavior",
+      "purpose": "exercise the complete language bad-behavior fixture tree"
+    },
+    "crates/jankurai/tests/fixtures/language_bad_behavior/sql/": {
+      "command": "cargo test -p jankurai --test language_bad_behavior",
+      "purpose": "exercise SQL detector fixtures"
+    },
+    "crates/jankurai/tests/fixtures/language_bad_behavior/typescript/": {
+      "command": "cargo test -p jankurai --test language_bad_behavior",
+      "purpose": "exercise TypeScript detector fixtures"
+    },
+    "crates/jankurai/tests/fixtures/language_bad_behavior/docker/": {
+      "command": "cargo test -p jankurai --test language_bad_behavior",
+      "purpose": "exercise container detector fixtures"
+    },
+    "crates/jankurai/tests/fixtures/language_bad_behavior/python/": {
+      "command": "cargo test -p jankurai --test language_bad_behavior",
+      "purpose": "exercise Python detector fixtures"
+    },
+    "crates/jankurai/tests/fixtures/language_bad_behavior/ci/": {
+      "command": "cargo test -p jankurai --test language_bad_behavior",
+      "purpose": "exercise CI detector fixtures"
+    },
+    "crates/jankurai/tests/fixtures/language_bad_behavior/git/": {
+      "command": "cargo test -p jankurai --test language_bad_behavior",
+      "purpose": "exercise Git detector fixtures"
+    },
+    "crates/jankurai/tests/fixtures/language_bad_behavior/gittools/": {
+      "command": "cargo test -p jankurai --test language_bad_behavior",
+      "purpose": "exercise Git tooling detector fixtures"
+    },
+    "crates/jankurai/tests/fixtures/language_bad_behavior/release/": {
+      "command": "cargo test -p jankurai --test language_bad_behavior",
+      "purpose": "exercise release detector fixtures"
+    },
+    "db/migrations/": {
+      "command": "cargo run -p jankurai -- migrate . --analyze --json target/jankurai/migration-report.json",
+      "purpose": "analyze migration safety and liability before merge"
+    },
+    "tools/security-lane.sh": {
+      "command": "bash scripts/ci-local.sh security",
+      "purpose": "exercise the fail-closed secret, dependency, workflow, SBOM, and vulnerability lane"
+    },
     "crates/": {
       "command": "cargo nextest run --workspace",
       "purpose": "run the Rust workspace test suite for the jankurai crate"

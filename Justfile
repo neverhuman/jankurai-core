@@ -18,8 +18,10 @@ bootstrap: setup
 
 # Deterministic fast lane: the narrowest proof loop for agent iteration.
 fast:
-    cargo check --workspace --locked
-    cargo nextest run --workspace
+    cargo check -p jankurai --locked
+    cargo nextest run -p jankurai
+    cargo run -p jankurai -- audit . --changed-fast --changed Cargo.lock --no-score-history --json target/jankurai/audit-fast.json --md target/jankurai/audit-fast.md
+    jq '{score, raw_score, caps_applied, findings}' target/jankurai/audit-fast.json > target/jankurai/fast-score.json
 
 # Run the full local check: format, lint, fast lane, security, and audit.
 check: fmt lint fast security audit
@@ -40,12 +42,11 @@ test:
 # Security lane: secret scanning plus dependency vulnerability scanning.
 # gitleaks scans for committed secrets; cargo audit checks the Rust dependency tree.
 security:
-    gitleaks detect --source . --no-banner --redact
-    cargo audit
+    bash ops/ci/security.sh
 
-# Jankurai self-audit lane: writes the repo-score artifacts that CI uploads.
+# Exact-source full self-audit lane: writes the repo-score artifacts CI uploads.
 audit:
-    /home/ubuntu/jankurai-split/jankurai/.fusion/target/debug/jankurai audit . --no-score-history --json .jankurai/repo-score.json --md .jankurai/repo-score.md
+    bash ops/ci/audit.sh
 
 # Print the declared version.
 versions:

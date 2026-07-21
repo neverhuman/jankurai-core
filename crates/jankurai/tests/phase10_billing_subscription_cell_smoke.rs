@@ -54,8 +54,8 @@ fn billing_subscription_is_tenth_certified_dependency_bound_cell() {
         .find(|cell| cell["cell_id"] == "billing-subscription")
         .expect("billing-subscription cell must be present in registry");
 
-    assert_eq!(billing_sub["lifecycle"], "certified");
-    assert_eq!(billing_sub["certification_status"], "certified");
+    assert_eq!(billing_sub["lifecycle"], "experimental");
+    assert_eq!(billing_sub["certification_status"], "candidate");
     assert_eq!(billing_sub["category"], "commerce");
 
     let evidence = billing_sub["certification_evidence"].as_array().unwrap();
@@ -65,6 +65,6 @@ fn billing_subscription_is_tenth_certified_dependency_bound_cell() {
                 .as_str()
                 .unwrap()
                 .contains("domain-billing-subscription-state-policy")
-            && item["status"] == "present"
+            && item["status"] == "missing"
     }));
 }

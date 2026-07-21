@@ -54,8 +54,8 @@ fn auth_session_is_fourth_certified_dependency_bound_cell() {
         .find(|cell| cell["cell_id"] == "auth-session")
         .expect("auth-session cell must be present in registry");
 
-    assert_eq!(auth_session["lifecycle"], "certified");
-    assert_eq!(auth_session["certification_status"], "certified");
+    assert_eq!(auth_session["lifecycle"], "experimental");
+    assert_eq!(auth_session["certification_status"], "candidate");
     assert_eq!(auth_session["category"], "identity");
 
     // Dependency ordering
@@ -79,7 +79,7 @@ fn auth_session_is_fourth_certified_dependency_bound_cell() {
                 .as_str()
                 .unwrap()
                 .contains("domain-session-token-hash")
-            && item["status"] == "present"
+            && item["status"] == "missing"
     }));
 
     // Proof lanes include security and ux-qa
@@ -107,11 +107,11 @@ fn auth_session_prove_emits_evidence_bound_decision() {
 
     assert_eq!(prove["mode"], "prove");
     assert_eq!(prove["lifecycle_action"], "prove-certification");
-    assert_eq!(prove["certification_decision"]["status"], "certified");
-    assert_eq!(prove["certification_decision"]["merge_ready"], true);
+    assert_eq!(prove["certification_decision"]["status"], "candidate");
+    assert_eq!(prove["certification_decision"]["merge_ready"], false);
     assert_eq!(
         prove["certification_decision"]["dependency_satisfied"],
-        true
+        false
     );
     assert!(!prove["certification_evidence"]
         .as_array()

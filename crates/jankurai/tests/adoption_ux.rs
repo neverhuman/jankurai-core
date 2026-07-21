@@ -17,14 +17,25 @@ fn repo_root() -> PathBuf {
 #[test]
 fn adopt_legacy_node_emits_migration_target_plan() {
     let repo = repo_root();
-    let fixture = repo.join("examples/legacy-node-api");
+    let fixture_dir = tempdir().unwrap();
+    let fixture = fixture_dir.path();
+    fs::write(
+        fixture.join("package.json"),
+        r#"{"name":"legacy-node-api","dependencies":{"express":"4.21.2"}}"#,
+    )
+    .unwrap();
+    fs::write(
+        fixture.join("server.js"),
+        "const express = require('express');\nexpress().listen(3000);\n",
+    )
+    .unwrap();
     let out_dir = tempdir().unwrap();
     let json_path = out_dir.path().join("adoption-plan.json");
     let md_path = out_dir.path().join("adoption-plan.md");
 
     let status = Command::new(binary_path())
         .arg("adopt")
-        .arg(&fixture)
+        .arg(fixture)
         .arg("--mode")
         .arg("observe")
         .arg("--out")
