@@ -1,7 +1,8 @@
 # Boundary manifest for jankurai-core.
 # This is a single-purpose Rust workspace: the jankurai auditor crate.
-# Only the Rust domain block applies here; web, database, queue, and Python
-# surfaces are not part of this repo. See docs/boundaries.md for prose.
+# Only the Rust domain and required empty queue-contract blocks apply here;
+# web, database, and Python surfaces are not part of this repo.
+# See docs/boundaries.md for prose.
 
 [stack]
 id = "rust-ts-vite-react-postgres-bounded-python"
@@ -22,3 +23,8 @@ forbidden_domain_imports = [
   "tracing::",
   "log::"
 ]
+
+[queues]
+adapter_paths = []
+event_contract_paths = []
+generated_type_paths = []

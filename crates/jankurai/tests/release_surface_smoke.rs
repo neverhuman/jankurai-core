@@ -113,12 +113,12 @@ fn security_tools_script_bootstraps_node_before_security_scans() {
 }
 
 #[test]
-fn audit_script_bootstraps_node_before_npm_ci() {
+fn audit_script_uses_the_governed_jankurai_identity() {
     let text = read("ops/ci/audit.sh");
 
-    let node_bootstrap = text.find("node-tools.sh").expect("node bootstrap");
-    let npm_ci = text.find("step \"npm ci\"").expect("npm ci step");
-    assert!(node_bootstrap < npm_ci);
+    assert!(text.contains("run_governed_jankurai audit"));
+    assert!(!text.contains("cargo install --path crates/jankurai"));
+    assert!(!text.contains("\njankurai audit"));
 }
 
 #[test]
@@ -135,9 +135,9 @@ fn coverage_script_adds_cargo_home_bin_before_tool_checks() {
 fn post_main_shadow_script_is_local_origin_only_and_jeryu_backed() {
     let text = read("ops/ci/post-main-shadow.sh");
 
-    assert!(text.contains("ssh://git@127.0.0.1:2224/root/jankurai.git"));
-    assert!(text.contains(".jeryu/local/repos/jankurai.toml"));
-    assert!(text.contains("jeryu repo shadow --repo root/jankurai"));
+    assert!(text.contains("ssh://git@127.0.0.1:2224/root/jankurai-core.git"));
+    assert!(text.contains(".jeryu/local/repos/jankurai-core.toml"));
+    assert!(text.contains("jeryu repo shadow --repo root/jankurai-core"));
     assert!(text.contains("CI_COMMIT_BRANCH"));
     assert!(text.contains("CI_COMMIT_SHA"));
 }
@@ -147,7 +147,7 @@ fn homebrew_formula_template_uses_tagged_source_checkout() {
     let text = read("ops/homebrew/jankurai.rb");
 
     assert!(text.contains("__RELEASE_TAG__"));
-    assert!(text.contains("https://github.com/neverhuman/jankurai.git"));
+    assert!(text.contains("https://github.com/neverhuman/jankurai-core.git"));
     assert!(text.contains("system \"cargo\", \"install\""));
     assert!(text.contains("bin/\"jankurai\""));
 }

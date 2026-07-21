@@ -159,7 +159,8 @@ fn gitlab_ci_pipeline_mirrors_internal_first_release_flow() {
     assert!(text.contains("bash ops/ci/quality-gates.sh"));
     assert!(text.contains("bash ops/ci/coverage-llvm.sh"));
     assert!(text.contains("bash ops/ci/security-tools.sh"));
-    assert!(text.contains("cargo run -p jankurai -- security run . --strict --profile ci --script tools/security-lane.sh --out target/jankurai/security/evidence.json"));
+    assert!(text.contains("bash ops/ci/governed-jankurai.sh security run . --strict --profile ci --script tools/security-lane.sh --out target/jankurai/security/evidence.json"));
+    assert!(!text.contains("cargo run -p jankurai -- security run"));
     assert!(text.contains("bash ops/ci/audit.sh"));
     assert!(text.contains("bash ops/ci/release-audit-gate.sh"));
     assert!(text.contains("bash ops/ci/release-build.sh"));

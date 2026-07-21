@@ -30,11 +30,11 @@ fn canonical_test_map_validates_with_strict_json_parsing() {
 #[test]
 fn local_jeryu_shadow_config_is_present_and_routed() {
     let repo = repo_root();
-    let text = fs::read_to_string(repo.join(".jeryu/local/repos/jankurai.toml"))
+    let text = fs::read_to_string(repo.join(".jeryu/local/repos/jankurai-core.toml"))
         .expect("read local Jeryu shadow config");
 
-    assert!(text.contains("repo = \"root/jankurai\""));
-    assert!(text.contains("remote_url = \"git@github.com:neverhuman/jankurai.git\""));
+    assert!(text.contains("repo = \"root/jankurai-core\""));
+    assert!(text.contains("remote_url = \"git@github.com:neverhuman/jankurai-core.git\""));
     assert!(text.contains("refs = [\"refs/heads/main\"]"));
 }
 

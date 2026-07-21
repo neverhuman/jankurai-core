@@ -54,7 +54,11 @@ design_doc_hard = 600
 
 [scan]
 excluded_paths = [".fusion", ".jankurai", ".cargo", "target", "node_modules", "tips/"]
-extra_excluded_paths = ["conformance/fixtures"]
+extra_excluded_paths = [
+  "conformance/fixtures",
+  "examples/legacy-node-api",
+  "examples/perfect-web-api-db",
+]
 
 # HLT-046-UNNECESSARY-VARIETY (advisory). `min_instance` is the minimum number of
 # distinct active-source modules a same-name enum/const/static must appear in

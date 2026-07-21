@@ -5,6 +5,46 @@
       "command": "cargo nextest run --workspace",
       "purpose": "run the Rust workspace test suite for the jankurai crate"
     },
+    "crates/jankurai/tests/language_bad_behavior.rs": {
+      "command": "cargo test -p jankurai --test language_bad_behavior",
+      "purpose": "verify the language bad-behavior fixtures, catalog docs, and fixed-executable false-positive suppression"
+    },
+    "crates/jankurai/tests/fixtures/language_bad_behavior/": {
+      "command": "cargo test -p jankurai --test language_bad_behavior",
+      "purpose": "verify the language bad-behavior fixture corpus and catalog docs"
+    },
+    "crates/jankurai/tests/fixtures/language_bad_behavior/sql/": {
+      "command": "cargo test -p jankurai --test language_bad_behavior",
+      "purpose": "verify SQL bad-behavior fixtures"
+    },
+    "crates/jankurai/tests/fixtures/language_bad_behavior/typescript/": {
+      "command": "cargo test -p jankurai --test language_bad_behavior",
+      "purpose": "verify TypeScript bad-behavior fixtures"
+    },
+    "crates/jankurai/tests/fixtures/language_bad_behavior/docker/": {
+      "command": "cargo test -p jankurai --test language_bad_behavior",
+      "purpose": "verify Docker bad-behavior fixtures"
+    },
+    "crates/jankurai/tests/fixtures/language_bad_behavior/python/": {
+      "command": "cargo test -p jankurai --test language_bad_behavior",
+      "purpose": "verify Python bad-behavior fixtures"
+    },
+    "crates/jankurai/tests/fixtures/language_bad_behavior/ci/": {
+      "command": "cargo test -p jankurai --test language_bad_behavior",
+      "purpose": "verify CI bad-behavior fixtures"
+    },
+    "crates/jankurai/tests/fixtures/language_bad_behavior/git/": {
+      "command": "cargo test -p jankurai --test language_bad_behavior",
+      "purpose": "verify Git bad-behavior fixtures"
+    },
+    "crates/jankurai/tests/fixtures/language_bad_behavior/gittools/": {
+      "command": "cargo test -p jankurai --test language_bad_behavior",
+      "purpose": "verify Git tooling bad-behavior fixtures"
+    },
+    "crates/jankurai/tests/fixtures/language_bad_behavior/release/": {
+      "command": "cargo test -p jankurai --test language_bad_behavior",
+      "purpose": "verify release bad-behavior fixtures"
+    },
     "Cargo.toml": {
       "command": "cargo check --workspace --locked",
       "purpose": "verify the workspace manifest builds with the locked dependency graph"
@@ -65,9 +105,45 @@
       "command": "bash scripts/ci-local.sh required",
       "purpose": "verify local CI and fusion helpers"
     },
+    "tools/": {
+      "command": "cargo nextest run --locked --offline -p jankurai --test security_lane_wrapper_smoke",
+      "purpose": "verify security-lane evidence remains strict, structured, and fail-closed"
+    },
     ".github/": {
       "command": "bash scripts/ci-local.sh required",
       "purpose": "verify CI workflow entrypoints stay pinned and thin"
+    },
+    ".gitlab-ci.yml": {
+      "command": "cargo nextest run --locked --offline -p jankurai --test gitlab_ci_smoke",
+      "purpose": "verify the internal-first GitLab mirror pipeline stays governed and fail-closed"
+    },
+    "jankurai-installer.sh": {
+      "command": "cargo nextest run --locked --offline -p jankurai --test release_surface_smoke",
+      "purpose": "verify portable release installation retains provenance and signature checks"
+    },
+    "action.yml": {
+      "command": "cargo nextest run --locked --offline -p jankurai --test action_metadata_smoke",
+      "purpose": "verify the composite action metadata and governed audit command wiring"
+    },
+    "conformance/": {
+      "command": "cargo nextest run --locked --offline -p jankurai --test conformance_runner --test conformance_fixture_inventory",
+      "purpose": "verify canonical conformance fixtures, expected decisions, and inventory"
+    },
+    "examples/perfect-web-api-db/": {
+      "command": "cargo nextest run --locked --offline -p jankurai --test command_surface_smoke",
+      "purpose": "verify the immutable certification reference fixture"
+    },
+    "examples/legacy-node-api/": {
+      "command": "cargo nextest run --locked --offline -p jankurai --test adoption_ux",
+      "purpose": "verify the immutable migration-classification reference fixture"
+    },
+    "db/migrations/": {
+      "command": "bash ops/ci/governed-jankurai.sh migrate . --analyze --json target/jankurai/migration-report.json",
+      "purpose": "verify migration inventory and liability evidence when SQL migrations change"
+    },
+    "tips/": {
+      "command": "just score",
+      "purpose": "verify upgrade and feedback source material remains routed into the standard"
     },
     "rust-toolchain.toml": {
       "command": "cargo check --workspace --locked",

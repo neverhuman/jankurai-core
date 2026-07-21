@@ -45,7 +45,7 @@ security:
 
 # Jankurai self-audit lane: writes the repo-score artifacts that CI uploads.
 audit:
-    /home/ubuntu/jankurai-split/jankurai/.fusion/target/debug/jankurai audit . --no-score-history --json .jankurai/repo-score.json --md .jankurai/repo-score.md
+    bash ops/ci/governed-jankurai.sh audit . --no-score-history --json .jankurai/repo-score.json --md .jankurai/repo-score.md
 
 # Print the declared version.
 versions:

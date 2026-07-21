@@ -41,7 +41,7 @@ destructive = false
 
 [[lane]]
 name = "coverage-audit"
-command = "cargo run -p jankurai -- coverage audit . --config agent/coverage-sources.toml --json target/jankurai/coverage/coverage-audit.json --md target/jankurai/coverage/coverage-audit.md"
+command = "bash ops/ci/governed-jankurai.sh coverage audit . --config agent/coverage-sources.toml --json target/jankurai/coverage/coverage-audit.json --md target/jankurai/coverage/coverage-audit.md"
 purpose = "parse deterministic coverage and proof-gap artifacts without running external tools"
 command_id = "lane.coverage-audit"
 kind = "analysis"
@@ -85,27 +85,27 @@ destructive = false
 
 [[lane]]
 name = "adapters"
-command = "cargo run -p jankurai -- adapters verify"
+command = "bash ops/ci/governed-jankurai.sh adapters verify"
 purpose = "verify thin adapter pointers"
 
 [[lane]]
 name = "master-plan-proof"
-command = "cargo run -p jankurai -- lane . --changed agent/MASTER_PLAN.md --out target/jankurai/master-plan-proof.json --md target/jankurai/master-plan-proof.md"
+command = "bash ops/ci/governed-jankurai.sh lane . --changed agent/MASTER_PLAN.md --out target/jankurai/master-plan-proof.json --md target/jankurai/master-plan-proof.md"
 purpose = "verify master plan routing"
 
 [[lane]]
 name = "phase-proof"
-command = "cargo run -p jankurai -- lane . --changed tips/phases/logs/README.txt --out target/jankurai/phase-proof.json --md target/jankurai/phase-proof.md"
+command = "bash ops/ci/governed-jankurai.sh lane . --changed tips/phases/logs/README.txt --out target/jankurai/phase-proof.json --md target/jankurai/phase-proof.md"
 purpose = "verify phase logs routing"
 
 [[lane]]
 name = "versions-check"
-command = "cargo test -p jankurai && cargo run -p jankurai -- versions"
+command = "cargo test -p jankurai && bash ops/ci/governed-jankurai.sh versions"
 purpose = "verify versions"
 
 [[lane]]
 name = "doctor"
-command = "cargo run -p jankurai -- doctor --fail-on high"
+command = "bash ops/ci/governed-jankurai.sh doctor --fail-on high"
 purpose = "run doctor checks"
 
 [[lane]]
@@ -154,7 +154,7 @@ destructive = false
 
 [[lane]]
 name = "copy-code"
-command = "cargo run -p jankurai -- copy-code . --json target/jankurai/copy-code.json --md target/jankurai/copy-code.md"
+command = "bash ops/ci/governed-jankurai.sh copy-code . --json target/jankurai/copy-code.json --md target/jankurai/copy-code.md"
 purpose = "scan the repository for exact and high-confidence duplicated source code"
 command_id = "lane.copy-code"
 kind = "analysis"
@@ -180,12 +180,12 @@ destructive = false
 
 [[lane]]
 name = "migrate-fixture"
-command = "cargo run -p jankurai -- migrate examples/legacy-node-api --json target/jankurai/migration/node.json"
+command = "bash ops/ci/governed-jankurai.sh migrate examples/legacy-node-api --json target/jankurai/migration/node.json"
 purpose = "verify migration fixture"
 
 [[lane]]
 name = "db-migration-analyze"
-command = "cargo run -p jankurai -- migrate . --analyze --json target/jankurai/migration-report.json"
+command = "bash ops/ci/governed-jankurai.sh migrate . --analyze --json target/jankurai/migration-report.json"
 purpose = "write migration liability report for DB and modernization evidence"
 command_id = "lane.db-migration-analyze"
 kind = "analysis"
@@ -218,5 +218,5 @@ purpose = "verify UX QA"
 
 [[lane]]
 name = "observability"
-command = "cargo run -p jankurai -- . --json target/jankurai/observability-score.json --md target/jankurai/observability-score.md"
+command = "bash ops/ci/governed-jankurai.sh audit . --json target/jankurai/observability-score.json --md target/jankurai/observability-score.md"
 purpose = "verify telemetry and repair receipt surfaces"

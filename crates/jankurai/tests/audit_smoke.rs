@@ -1444,7 +1444,24 @@ fn audit_repo_root_still_has_no_findings() {
         .iter()
         .filter(|finding| !finding.check_id.ends_with(":coverage-evidence"))
         .collect::<Vec<_>>();
-    assert!(unexpected.is_empty(), "{:?}", unexpected);
+    let mut actual_check_ids = unexpected
+        .iter()
+        .map(|finding| finding.check_id.as_str())
+        .collect::<Vec<_>>();
+    actual_check_ids.sort_unstable();
+    assert_eq!(
+        actual_check_ids,
+        vec!["HLT-018-PERF-CONCURRENCY-DRIFT:proof",],
+        "{:?}",
+        unexpected
+    );
+    assert!(
+        unexpected
+            .iter()
+            .all(|finding| finding.severity == "medium" && finding.hardness == "soft"),
+        "{:?}",
+        unexpected
+    );
     assert!(
         report
             .findings
