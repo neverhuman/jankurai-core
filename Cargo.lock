@@ -738,7 +738,7 @@ dependencies = [
 [[package]]
 name = "jankurai-audit-analyzers"
 version = "0.1.0"
-source = "git+https://github.com/neverhuman/jankurai-tools-analyzers.git?tag=jankurai-tools-analyzers-v1.7.0-split.3#f511019045d83023ca0af83b81a2f0bc018405e7"
+source = "git+https://github.com/neverhuman/jankurai-tools-analyzers.git?tag=jankurai-tools-analyzers-v1.7.0-split.4#68cd6edd1946b2dceffe8a08e022d79cd390bd25"
 dependencies = [
  "anyhow",
  "globset",
