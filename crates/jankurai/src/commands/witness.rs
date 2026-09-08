@@ -1,13 +1,14 @@
+mod outcome;
+mod receipts;
+
 use crate::audit::{run_audit_with_options, AuditOptions};
 use crate::commands::context_data::{push_unique, GeneratedZone, RepoCatalog};
-use crate::commands::score::{finding_summary, FindingSummary};
-use crate::model::{Finding, ProofReceipt, Report};
+use crate::commands::score::FindingSummary;
 use crate::validation::{self, ArtifactSchema};
 use anyhow::{Context, Result};
+use receipts::{load_proof_receipts, load_proofbind_summary};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -110,10 +111,7 @@ pub fn run(args: WitnessArgs) -> Result<()> {
         &witness,
     )?;
     crate::render::write_markdown(&args.md, &render_markdown(&witness))?;
-    if matches!(
-        witness.decision.as_str(),
-        "block" | "ratchet_fail" | "release_fail"
-    ) {
+    if witness.decision != "pass" {
         anyhow::bail!("merge witness decision `{}`", witness.decision);
     }
     Ok(())
@@ -122,14 +120,14 @@ pub fn run(args: WitnessArgs) -> Result<()> {
 pub fn build_witness(args: &WitnessArgs) -> Result<MergeWitness> {
     let catalog = RepoCatalog::load(&args.repo)?;
     let changed = if let Some(base) = args.changed_from.as_deref() {
-        crate::audit::changed_paths_from_git(&args.repo, base)?
+        changed_paths_from_git(&args.repo, base)?
     } else {
         args.changed.clone()
     };
     let changed_paths = normalize_paths(&args.repo, &changed);
     let report = run_audit_with_options(
         &args.repo,
-        &changed,
+        &[],
         AuditOptions {
             self_audit: false,
             proof_receipts: args.proof_receipts.clone(),
@@ -159,53 +157,23 @@ pub fn build_witness(args: &WitnessArgs) -> Result<MergeWitness> {
         );
     }
 
-    let current_findings = finding_map_from_report(&report);
-    let baseline_value = if let Some(path) = args.baseline.as_deref() {
-        Some(load_json(&args.repo.join(path)).or_else(|_| load_json(Path::new(path)))?)
-    } else {
-        None
-    };
-    let baseline_score = baseline_value.as_ref().map(|value| {
-        value
-            .get("score")
-            .and_then(Value::as_i64)
-            .unwrap_or(report.score as i64) as i32
-    });
-    let baseline_caps = baseline_value
-        .as_ref()
-        .map(|value| string_set(value.get("caps_applied")))
-        .unwrap_or_default();
-    let current_caps: BTreeSet<String> = report.caps_applied.iter().cloned().collect();
-    let caps_added: Vec<String> = current_caps.difference(&baseline_caps).cloned().collect();
-    let baseline_findings = baseline_value
-        .as_ref()
-        .map(finding_map_from_value)
-        .unwrap_or_default();
-    let (new_findings, resolved_findings, carried_findings) =
-        finding_changes(&baseline_findings, &current_findings);
-    let has_new_high = new_findings
-        .iter()
-        .any(|finding| matches!(finding.severity.as_str(), "high" | "critical"));
-    let current_failed = report
-        .decision
-        .as_ref()
-        .map(|decision| !decision.passed)
-        .unwrap_or(false);
-    let score_delta = baseline_score.map(|score| report.score - score);
-    let decision = if score_delta.is_some_and(|delta| delta < 0) {
-        "ratchet_fail"
-    } else if current_failed || has_new_high || !missing_evidence.is_empty() {
-        "block"
-    } else if baseline_score.is_none() || !new_findings.is_empty() || !caps_added.is_empty() {
-        "review"
-    } else {
-        "pass"
-    };
+    let baseline_path = args.baseline.as_ref().map(|path| args.repo.join(path));
+    let assessment = outcome::assess(
+        &report,
+        baseline_path.as_deref(),
+        &route_decisions,
+        &proofbind,
+        &mut missing_evidence,
+    )?;
     let mut next_repair = Vec::new();
-    for missing in &missing_evidence {
+    for missing in assessment
+        .conformance_blockers
+        .iter()
+        .chain(&assessment.review_reasons)
+    {
         push_unique(&mut next_repair, missing.clone());
     }
-    for finding in new_findings.iter().take(5) {
+    for finding in assessment.new_findings.iter().take(5) {
         push_unique(
             &mut next_repair,
             format!(
@@ -216,21 +184,10 @@ pub fn build_witness(args: &WitnessArgs) -> Result<MergeWitness> {
             ),
         );
     }
-    if proofbind.missing_obligation_count > 0 {
-        push_unique(
-            &mut next_repair,
-            format!(
-                "proofbind reports {} semantic proof obligation(s) still missing receipt evidence",
-                proofbind.missing_obligation_count
-            ),
-        );
-    }
     if next_repair.is_empty() {
         next_repair.push("merge proof is complete; keep receipts attached to the PR".into());
     }
 
-    let conformance_blockers = missing_evidence.clone();
-    let observed_conformance_level = if decision == "pass" { "HL3" } else { "HL2" };
     Ok(MergeWitness {
         schema_version: "1.0.0".into(),
         standard_version: crate::model::STANDARD_VERSION.into(),
@@ -256,18 +213,18 @@ pub fn build_witness(args: &WitnessArgs) -> Result<MergeWitness> {
         missing_evidence,
         current_score: report.score,
         current_raw_score: report.raw_score,
-        baseline_score,
-        score_delta,
+        baseline_score: assessment.baseline_score,
+        score_delta: assessment.score_delta,
         claimed_conformance_level: "HL3".into(),
-        observed_conformance_level: observed_conformance_level.into(),
-        conformance_decision: decision.into(),
-        conformance_blockers,
+        observed_conformance_level: assessment.observed_conformance_level,
+        conformance_decision: assessment.decision.into(),
+        conformance_blockers: assessment.conformance_blockers,
         caps_applied: report.caps_applied,
-        caps_added,
-        new_findings,
-        resolved_findings,
-        carried_findings,
-        decision: decision.into(),
+        caps_added: assessment.caps_added,
+        new_findings: assessment.new_findings,
+        resolved_findings: assessment.resolved_findings,
+        carried_findings: assessment.carried_findings,
+        decision: assessment.decision.into(),
         next_repair,
     })
 }
@@ -351,314 +308,6 @@ fn generated_zone_touches(
     out
 }
 
-fn load_proof_receipts(repo: &Path, path: Option<&str>) -> Result<Vec<ProofReceiptSummary>> {
-    let Some(path) = path else {
-        return Ok(vec![]);
-    };
-    let path = resolve(repo, path);
-    if !path.exists() {
-        return Ok(vec![]);
-    }
-    let mut entries = Vec::new();
-    if path.is_dir() {
-        for entry in fs::read_dir(&path).with_context(|| format!("read {}", path.display()))? {
-            let entry = entry?;
-            if entry.path().extension().and_then(|ext| ext.to_str()) == Some("json") {
-                entries.push(entry.path());
-            }
-        }
-        entries.sort();
-    } else {
-        entries.push(path);
-    }
-    let mut out = Vec::new();
-    for entry in entries {
-        let text =
-            fs::read_to_string(&entry).with_context(|| format!("read {}", entry.display()))?;
-        let value: Value =
-            serde_json::from_str(&text).with_context(|| format!("parse {}", entry.display()))?;
-        validation::validate_value(repo, ArtifactSchema::ProofReceipt, &value)?;
-        let receipt: ProofReceipt = serde_json::from_value(value)?;
-        if receipt.exit_code == 0 {
-            out.push(ProofReceiptSummary {
-                lane: receipt.lane,
-                command: receipt.command,
-                exit_code: receipt.exit_code,
-                receipt_path: Some(
-                    entry
-                        .strip_prefix(repo)
-                        .unwrap_or(&entry)
-                        .to_string_lossy()
-                        .replace('\\', "/"),
-                ),
-                git_head: receipt.git_head,
-                changed_paths: receipt.changed_paths,
-            });
-        }
-    }
-    Ok(out)
-}
-
-fn load_proofbind_summary(
-    repo: &Path,
-    proof_receipts: Option<&str>,
-) -> Result<ProofBindWitnessSummary> {
-    let obligations_path = repo.join("target/jankurai/proofbind/obligations.json");
-    if !obligations_path.exists() {
-        return Ok(ProofBindWitnessSummary {
-            changed_surface_count: 0,
-            satisfied_obligation_count: 0,
-            missing_obligation_count: 0,
-            verdict: "not_run".into(),
-        });
-    }
-    let obligations_value = load_json(&obligations_path)?;
-    validation::validate_value(
-        repo,
-        ArtifactSchema::ProofBindObligations,
-        &obligations_value,
-    )?;
-    let receipt_values = load_proof_receipt_values(repo, proof_receipts)?;
-    let changed_surface_count = obligations_value
-        .get("summary")
-        .and_then(|summary| summary.get("changed_surface_count"))
-        .and_then(Value::as_u64)
-        .unwrap_or(0) as usize;
-    let obligations = obligations_value
-        .get("obligations")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let mut satisfied = 0usize;
-    let mut missing = 0usize;
-    for obligation in &obligations {
-        let already_satisfied = obligation
-            .get("satisfied")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        if already_satisfied
-            || receipt_values
-                .iter()
-                .any(|receipt| receipt_satisfies_obligation(obligation, receipt))
-        {
-            satisfied += 1;
-        } else {
-            missing += 1;
-        }
-    }
-    let configured_verdict = obligations_value
-        .get("summary")
-        .and_then(|summary| summary.get("verdict"))
-        .and_then(Value::as_str)
-        .unwrap_or("review");
-    let verdict = if missing == 0 {
-        "pass"
-    } else {
-        configured_verdict
-    };
-    Ok(ProofBindWitnessSummary {
-        changed_surface_count,
-        satisfied_obligation_count: satisfied,
-        missing_obligation_count: missing,
-        verdict: verdict.into(),
-    })
-}
-
-fn load_proof_receipt_values(repo: &Path, path: Option<&str>) -> Result<Vec<Value>> {
-    let Some(path) = path else {
-        return Ok(vec![]);
-    };
-    let path = resolve(repo, path);
-    if !path.exists() {
-        return Ok(vec![]);
-    }
-    let mut entries = Vec::new();
-    if path.is_dir() {
-        for entry in fs::read_dir(&path).with_context(|| format!("read {}", path.display()))? {
-            let entry = entry?;
-            if entry.path().extension().and_then(|ext| ext.to_str()) == Some("json") {
-                entries.push(entry.path());
-            }
-        }
-        entries.sort();
-    } else {
-        entries.push(path);
-    }
-    let mut values = Vec::new();
-    for entry in entries {
-        let text =
-            fs::read_to_string(&entry).with_context(|| format!("read {}", entry.display()))?;
-        let value: Value =
-            serde_json::from_str(&text).with_context(|| format!("parse {}", entry.display()))?;
-        validation::validate_value(repo, ArtifactSchema::ProofReceipt, &value)?;
-        if value.get("exit_code").and_then(Value::as_i64).unwrap_or(1) == 0 {
-            values.push(value);
-        }
-    }
-    Ok(values)
-}
-
-fn receipt_satisfies_obligation(obligation: &Value, receipt: &Value) -> bool {
-    let obligation_id = obligation
-        .get("obligation_id")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    let proofmark = receipt
-        .get("extensions")
-        .and_then(|extensions| extensions.get("proofmark"))
-        .unwrap_or(&Value::Null);
-    if proofmark
-        .get("satisfied_obligations")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .any(|id| id == obligation_id)
-    {
-        return true;
-    }
-    if proofmark
-        .get("obligation_results")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .any(|result| {
-            result
-                .get("obligation_id")
-                .and_then(Value::as_str)
-                .is_some_and(|id| id == obligation_id)
-                && result
-                    .get("status")
-                    .and_then(Value::as_str)
-                    .is_some_and(|status| status == "pass")
-        })
-    {
-        return true;
-    }
-    let lane = receipt
-        .get("lane")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    if lane == "proofmark-rust" {
-        return false;
-    }
-    let lane_matches = obligation
-        .get("required_lanes")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .any(|required| required == lane);
-    if !lane_matches {
-        return false;
-    }
-    let path = obligation
-        .get("path")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    let path_matches = receipt
-        .get("changed_paths")
-        .and_then(Value::as_array)
-        .map(|paths| {
-            paths
-                .iter()
-                .filter_map(Value::as_str)
-                .any(|changed| changed == path || path.starts_with(&format!("{changed}/")))
-        })
-        .unwrap_or(true);
-    if !path_matches {
-        return false;
-    }
-    let covered_rules = receipt_rules_covered(receipt);
-    covered_rules.is_empty()
-        || obligation
-            .get("rule_ids")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .any(|rule| covered_rules.contains(rule))
-}
-
-fn receipt_rules_covered(receipt: &Value) -> BTreeSet<String> {
-    receipt
-        .get("rules_covered")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|item| {
-            if let Some(rule) = item.as_str() {
-                return Some(rule.to_string());
-            }
-            let status = item
-                .get("status")
-                .and_then(Value::as_str)
-                .unwrap_or("covered");
-            if !matches!(status, "covered" | "pass" | "satisfied") {
-                return None;
-            }
-            item.get("rule_id")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-        })
-        .collect()
-}
-
-fn finding_map_from_report(report: &Report) -> BTreeMap<String, FindingSummary> {
-    let mut out = BTreeMap::new();
-    for finding in &report.findings {
-        let summary = finding_summary_from_model(finding);
-        out.insert(summary.key.clone(), summary);
-    }
-    out
-}
-
-fn finding_summary_from_model(finding: &Finding) -> FindingSummary {
-    let value = serde_json::to_value(finding).unwrap_or(Value::Null);
-    finding_summary(&value)
-}
-
-fn finding_map_from_value(report: &Value) -> BTreeMap<String, FindingSummary> {
-    let mut out = BTreeMap::new();
-    let Some(findings) = report.get("findings").and_then(Value::as_array) else {
-        return out;
-    };
-    for finding in findings {
-        let summary = finding_summary(finding);
-        out.insert(summary.key.clone(), summary);
-    }
-    out
-}
-
-fn finding_changes(
-    baseline: &BTreeMap<String, FindingSummary>,
-    current: &BTreeMap<String, FindingSummary>,
-) -> (
-    Vec<FindingSummary>,
-    Vec<FindingSummary>,
-    Vec<FindingSummary>,
-) {
-    let mut new_findings = Vec::new();
-    let mut resolved_findings = Vec::new();
-    let mut carried_findings = Vec::new();
-    for (key, finding) in current {
-        if baseline.contains_key(key) {
-            carried_findings.push(finding.clone());
-        } else {
-            new_findings.push(finding.clone());
-        }
-    }
-    for (key, finding) in baseline {
-        if !current.contains_key(key) {
-            resolved_findings.push(finding.clone());
-        }
-    }
-    new_findings.sort_by(|a, b| a.key.cmp(&b.key));
-    resolved_findings.sort_by(|a, b| a.key.cmp(&b.key));
-    carried_findings.sort_by(|a, b| a.key.cmp(&b.key));
-    (new_findings, resolved_findings, carried_findings)
-}
-
 fn render_markdown(witness: &MergeWitness) -> String {
     use std::fmt::Write;
     let mut out = String::new();
@@ -729,28 +378,39 @@ fn normalize_paths(repo: &Path, paths: &[PathBuf]) -> Vec<String> {
     out
 }
 
-fn resolve(repo: &Path, path: &str) -> PathBuf {
-    let path = Path::new(path);
-    if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        repo.join(path)
+fn changed_paths_from_git(repo: &Path, base: &str) -> Result<Vec<PathBuf>> {
+    let commit = git_output(
+        repo,
+        &[
+            "rev-parse",
+            "--verify",
+            "--end-of-options",
+            &format!("{base}^{{commit}}"),
+        ],
+    )
+    .context("cannot resolve witness base commit")?;
+    let output = Command::new("git")
+        .args([
+            "diff",
+            "--name-only",
+            "-z",
+            &format!("{commit}...HEAD"),
+            "--",
+        ])
+        .current_dir(repo)
+        .output()?;
+    if !output.status.success() {
+        anyhow::bail!(
+            "cannot resolve witness changed paths: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
-}
-
-fn load_json(path: &Path) -> Result<Value> {
-    let text = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
-    serde_json::from_str(&text).with_context(|| format!("parse {}", path.display()))
-}
-
-fn string_set(value: Option<&Value>) -> BTreeSet<String> {
-    value
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .map(ToString::to_string)
-        .collect()
+    let paths = String::from_utf8(output.stdout).context("witness changed paths are not UTF-8")?;
+    Ok(paths
+        .split('\0')
+        .filter(|path| !path.is_empty())
+        .map(|path| repo.join(path))
+        .collect())
 }
 
 fn git_output(repo: &Path, args: &[&str]) -> Option<String> {
