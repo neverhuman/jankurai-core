@@ -45,7 +45,7 @@ pub fn check_versions(repo: &Path) -> Result<()> {
     let paper_edition = scalar(&manifest, "paper_edition")?;
     let target_stack = scalar(&manifest, "target_stack")?;
 
-    assert_contains(root.join("VERSION"), auditor_version.as_str(), "VERSION")?;
+    let split_identity = check_release_identity(&root, &manifest, &auditor_version)?;
     assert_contains(
         root.join("agent/JANKURAI_STANDARD.md"),
         &format!("Standard version: `{}`", STANDARD_VERSION),
@@ -62,8 +62,7 @@ pub fn check_versions(repo: &Path) -> Result<()> {
         "crates/jankurai/Cargo.toml package.version",
     )?;
 
-    let split_member = manifest.get("split_member").and_then(toml::Value::as_str);
-    if split_member != Some("jankurai-core") {
+    if split_identity.is_none() {
         assert_contains(
             root.join("docs/agent-native-standard.md"),
             &format!("Standard version: `{}`", STANDARD_VERSION),
@@ -95,6 +94,7 @@ pub fn check_versions(repo: &Path) -> Result<()> {
     }
 
     if standard_version != STANDARD_VERSION
+        || auditor_version != env!("CARGO_PKG_VERSION")
         || auditor_version != AUDITOR_VERSION
         || schema_version != SCHEMA_VERSION
         || paper_edition != PAPER_EDITION
@@ -102,10 +102,75 @@ pub fn check_versions(repo: &Path) -> Result<()> {
     {
         return Err(anyhow!("manifest bindings mismatch"));
     }
+    if let Some((family_release, member_tag)) = split_identity {
+        println!("Declared family release: `{family_release}`; member tag: `{member_tag}`");
+    }
     println!(
-        "versions ok: standard={} auditor={} schema={} paper={}",
+        "local version declarations consistent: standard={} auditor={} schema={} paper={}",
         STANDARD_VERSION, AUDITOR_VERSION, SCHEMA_VERSION, PAPER_EDITION
     );
+    Ok(())
+}
+
+/// Check declarations within this checkout, without admitting Git tag or dependency subjects.
+fn check_release_identity(
+    root: &Path,
+    manifest: &toml::Value,
+    auditor_version: &str,
+) -> Result<Option<(String, String)>> {
+    if manifest.get("split_member").is_none() {
+        if ["split_family", "family_release", "split_release"]
+            .iter()
+            .any(|key| manifest.get(*key).is_some())
+        {
+            return Err(anyhow!("split identity requires split_member"));
+        }
+        assert_version_file(root, auditor_version, "auditor release")?;
+        return Ok(None);
+    }
+    let member = scalar(manifest, "split_member")?;
+    let family = scalar(manifest, "split_family")?;
+    if member != "jankurai-core" || family != "jankurai" {
+        return Err(anyhow!(
+            "unsupported split identity: family={family} member={member}"
+        ));
+    }
+    let family_release = scalar(manifest, "family_release")?;
+    let member_release = scalar(manifest, "split_release")?;
+    for (label, value) in [
+        ("family_release", &family_release),
+        ("split_release", &member_release),
+    ] {
+        semver::Version::parse(value).map_err(|error| anyhow!("invalid {label}: {error}"))?;
+    }
+    assert_version_file(root, &family_release, "family release")?;
+    let member_text = fs::read_to_string(root.join("agent/split-member.toml"))?;
+    let member_manifest: toml::Value = toml::from_str(&member_text)?;
+    assert_str(
+        &member_manifest,
+        &["family"],
+        &family,
+        "split-member family",
+    )?;
+    assert_str(&member_manifest, &["repo"], &member, "split-member repo")?;
+    let member_tag = format!("{member}-v{member_release}");
+    assert_str(
+        &member_manifest,
+        &["release_tag_pattern"],
+        &member_tag,
+        "split-member release_tag_pattern",
+    )?;
+    Ok(Some((family_release, member_tag)))
+}
+
+fn assert_version_file(root: &Path, expected: &str, identity: &str) -> Result<()> {
+    let actual = fs::read_to_string(root.join("VERSION"))?;
+    if actual.trim() != expected {
+        return Err(anyhow!(
+            "VERSION ({identity}): expected {expected}, got {}",
+            actual.trim()
+        ));
+    }
     Ok(())
 }
 
@@ -118,6 +183,7 @@ fn scalar(value: &toml::Value, key: &str) -> Result<String> {
     value
         .get(key)
         .and_then(|v| v.as_str())
+        .filter(|value| !value.trim().is_empty())
         .map(|s| s.to_string())
         .ok_or_else(|| anyhow!("missing key {key}"))
 }
