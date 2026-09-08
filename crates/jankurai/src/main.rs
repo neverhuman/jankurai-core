@@ -1,6 +1,6 @@
 use clap::{Args, Parser, Subcommand};
 use jankurai::audit::policy::AuditMode;
-use jankurai::audit::{run_audit, run_audit_timed_with_options, AuditOptions};
+use jankurai::audit::{outcome, run_audit, run_audit_timed_with_policy, AuditOptions};
 use jankurai::commands::copy_code::CopyCodeArgs;
 use jankurai::commands::{
     adopt, agent, audit_file, badge, bench, cell, certify, conformance, context_pack, copy_code,
@@ -2538,6 +2538,19 @@ fn run_audit_and_write(args: AuditArgs) -> anyhow::Result<()> {
     if args.json == "-" && args.md == "-" {
         anyhow::bail!("use at most one stdout target; JSON and Markdown may not share stdout");
     }
+    let mode = AuditMode::parse(&args.mode)?;
+    let policy = outcome::resolve_policy(
+        &args.repo,
+        args.policy.as_deref(),
+        args.fail_under,
+        &args.fail_on,
+        mode,
+    )?;
+    if matches!(mode, AuditMode::Ratchet) && args.baseline.is_none() {
+        anyhow::bail!(
+            "ratchet mode requires --baseline PATH; first run advisory mode and commit an accepted baseline"
+        );
+    }
     let progress = jankurai::ui::CliProgress::new("scoring repository", 8);
     progress.tick("resolve changed paths");
     let (changed, changed_fast_effective, save_smart_state) =
@@ -2555,7 +2568,12 @@ fn run_audit_and_write(args: AuditArgs) -> anyhow::Result<()> {
         } else {
             use jankurai::audit::smart_scan::{decide, SmartScanConfig, SmartScanDecision};
             let config = SmartScanConfig {
-                enabled: !args.full,
+                // Cached state does not bind effective policy or a complete report.
+                enabled: !args.full
+                    && mode == AuditMode::Advisory
+                    && args.fail_under.is_none()
+                    && args.fail_on.is_empty()
+                    && args.policy.is_none(),
                 interval_secs: args.smart_interval.unwrap_or(3600),
                 roulette_rate: args.smart_rate.unwrap_or(0.10),
             };
@@ -2574,15 +2592,8 @@ fn run_audit_and_write(args: AuditArgs) -> anyhow::Result<()> {
                 }
             }
         };
-    progress.tick("load audit mode");
-    let mode = AuditMode::parse(&args.mode)?;
-    if matches!(mode, AuditMode::Ratchet) && args.baseline.is_none() {
-        anyhow::bail!(
-            "ratchet mode requires --baseline PATH; first run advisory mode and commit an accepted baseline"
-        );
-    }
     progress.tick("scan repository");
-    let (mut report, mut timings) = run_audit_timed_with_options(
+    let (mut report, mut timings) = run_audit_timed_with_policy(
         &args.repo,
         &changed,
         AuditOptions {
@@ -2590,38 +2601,22 @@ fn run_audit_and_write(args: AuditArgs) -> anyhow::Result<()> {
             proof_receipts: args.proof_receipts.clone(),
             changed_fast: changed_fast_effective,
         },
+        policy,
     )?;
     if changed_fast_effective {
         if let Some(git) = report.git.as_mut() {
             git.mode = "changed-fast".into();
         }
     }
-    progress.tick("apply score policy");
-    if let Some(minimum_score) = args.fail_under {
-        if let Some(policy) = report.policy.as_mut() {
-            policy.minimum_score = minimum_score;
-        }
-    }
-    if !args.fail_on.is_empty() {
-        if let Some(policy) = report.policy.as_mut() {
-            policy.fail_on = args.fail_on.clone();
-        }
-    }
-    recompute_report_decision(&mut report);
-    progress.tick("apply mode and baseline");
-    apply_mode_and_baseline(&mut report, mode, args.baseline.as_deref())?;
-    if matches!(mode, AuditMode::Release) {
-        let proof_findings = jankurai::audit::release_proof_findings(
-            &args.repo,
+    if mode == AuditMode::Release {
+        outcome::finalize_release(
+            &mut report,
+            args.baseline.as_deref(),
             args.proof_receipts.as_deref(),
             args.proof_evidence.as_deref(),
         )?;
-        if !proof_findings.is_empty() {
-            report.findings.extend(proof_findings);
-            jankurai::audit::rebuild_agent_fix_queue(&mut report);
-            recompute_report_decision(&mut report);
-            apply_mode_and_baseline(&mut report, mode, args.baseline.as_deref())?;
-        }
+    } else {
+        outcome::finalize(&mut report, args.baseline.as_deref())?;
     }
     progress.tick("render artifacts");
     report.report_fingerprint = jankurai::audit::report_fingerprint(&report);
@@ -2729,10 +2724,7 @@ fn run_audit_and_write(args: AuditArgs) -> anyhow::Result<()> {
     if save_smart_state {
         let _ = jankurai::audit::smart_scan::save_state(&args.repo, &report);
     }
-    if changed_fast_effective {
-        return Ok(());
-    }
-    enforce_audit_decision(&report, mode)?;
+    outcome::enforce(&report)?;
     Ok(())
 }
 
@@ -2785,69 +2777,6 @@ fn run_issues_export(args: IssuesExportArgs) -> anyhow::Result<()> {
         write_markdown(out, &text)?;
     } else {
         print!("{text}");
-    }
-    Ok(())
-}
-
-fn apply_mode_and_baseline(
-    report: &mut jankurai::model::Report,
-    mode: AuditMode,
-    baseline: Option<&str>,
-) -> anyhow::Result<()> {
-    if let Some(policy) = report.policy.as_mut() {
-        policy.mode = Some(mode.as_str().into());
-    }
-    let ratchet = baseline
-        .map(|path| {
-            jankurai::audit::baseline::compare_report_to_baseline(
-                report,
-                &std::path::PathBuf::from(path),
-            )
-        })
-        .transpose()?;
-    if let Some(decision) = report.decision.as_mut() {
-        if let Some(ratchet) = ratchet {
-            let ratchet_passed = ratchet.passed;
-            decision.ratchet = Some(ratchet);
-            if matches!(mode, AuditMode::Ratchet | AuditMode::Release) && !ratchet_passed {
-                decision.status = "fail".into();
-                decision.passed = false;
-            }
-        }
-        if mode == AuditMode::Advisory {
-            decision.status = "advisory".into();
-            decision.passed = true;
-        }
-    }
-    Ok(())
-}
-
-fn recompute_report_decision(report: &mut jankurai::model::Report) {
-    if let Some(policy) = report.policy.as_ref() {
-        report.decision = Some(jankurai::audit::report_decision(
-            report.score,
-            &report.findings,
-            policy,
-        ));
-    }
-}
-
-fn enforce_audit_decision(report: &jankurai::model::Report, mode: AuditMode) -> anyhow::Result<()> {
-    if matches!(mode, AuditMode::Advisory) {
-        return Ok(());
-    }
-    let Some(decision) = report.decision.as_ref() else {
-        anyhow::bail!("non-advisory audit produced no decision");
-    };
-    if !decision.passed {
-        anyhow::bail!(
-            "audit decision failed in {} mode: status={} score={} minimum_score={} hard_findings={}",
-            mode.as_str(),
-            decision.status,
-            report.score,
-            decision.minimum_score,
-            decision.hard_findings
-        );
     }
     Ok(())
 }

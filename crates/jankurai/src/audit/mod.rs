@@ -16,6 +16,7 @@ pub mod fs;
 pub mod fs_policy;
 pub mod helpers;
 pub mod language_rules;
+pub mod outcome;
 pub mod policy;
 pub mod profile_structure;
 pub mod proofbind_artifact;
@@ -39,6 +40,7 @@ use anyhow::Result;
 use caps::{caps_applied, CAPS};
 use finding_builder::{dimension_soft_route, FindingBuilder};
 use helpers::AuditContext;
+pub use outcome::report_decision;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
@@ -58,6 +60,12 @@ pub struct AuditOptions {
 pub struct AuditTimings {
     pub total_ms: u128,
     pub phases: Vec<AuditTimingPhase>,
+}
+
+struct AuditRun {
+    started: Instant,
+    timings: AuditTimings,
+    policy: outcome::ResolvedPolicy,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -99,6 +107,17 @@ pub fn run_audit_timed_with_options(
     changed: &[PathBuf],
     options: AuditOptions,
 ) -> Result<(Report, AuditTimings)> {
+    let policy = outcome::resolve_policy(root, None, None, &[], policy::AuditMode::Standard)?;
+    run_audit_timed_with_policy(root, changed, options, policy)
+}
+
+pub fn run_audit_timed_with_policy(
+    root: &Path,
+    changed: &[PathBuf],
+    options: AuditOptions,
+    policy: outcome::ResolvedPolicy,
+) -> Result<(Report, AuditTimings)> {
+    policy.require_current(root)?;
     let started = Instant::now();
     let mut timings = AuditTimings::default();
     let scope_paths: Vec<String> = changed
@@ -123,8 +142,11 @@ pub fn run_audit_timed_with_options(
         scope_paths,
         &options,
         changed,
-        started,
-        timings,
+        AuditRun {
+            started,
+            timings,
+            policy,
+        },
     )
 }
 
@@ -149,6 +171,7 @@ pub fn run_candidate_audit(
     root: &Path,
     opts: CandidateAuditOptions,
 ) -> Result<(Report, AuditTimings)> {
+    let policy = outcome::resolve_policy(root, None, None, &[], policy::AuditMode::Standard)?;
     let started = Instant::now();
     let mut timings = AuditTimings::default();
     let inventory_options = fs::InventoryOptions::from_policy(root);
@@ -170,8 +193,11 @@ pub fn run_candidate_audit(
         opts.scope_paths,
         &opts.options,
         &[],
-        started,
-        timings,
+        AuditRun {
+            started,
+            timings,
+            policy,
+        },
     )
 }
 
@@ -181,9 +207,13 @@ fn run_audit_inner(
     scope_paths: Vec<String>,
     options: &AuditOptions,
     changed: &[PathBuf],
-    started: Instant,
-    mut timings: AuditTimings,
+    run: AuditRun,
 ) -> Result<(Report, AuditTimings)> {
+    let AuditRun {
+        started,
+        mut timings,
+        policy,
+    } = run;
     let scope_files = if scope_paths.is_empty() {
         all_files.clone()
     } else {
@@ -237,7 +267,9 @@ fn run_audit_inner(
         .iter()
         .filter_map(|c| CAPS.iter().find(|(id, _)| id == c).map(|(_, m)| *m))
         .fold(raw_score, |acc, cap| acc.min(cap));
-    let policy = load_policy(root)?;
+    let resolved_policy = policy;
+    let policy = &resolved_policy.summary;
+    let policy_fingerprint = resolved_policy.fingerprint.clone();
     let ux_qa = attach_ux_report_artifact(root, analyzers::ux_qa_status(&ctx));
     let security_evidence_artifact = security_artifact::load_report_summary(root);
     let tool_adoption = analyzers::tool_adoption::status(&ctx);
@@ -256,9 +288,6 @@ fn run_audit_inner(
     findings.extend(coverage::score_findings(&coverage_ingest));
     let agent_fix_queue = fix_queue::build_agent_fix_queue(&findings);
     timings.record_duration("findings", findings_started.elapsed());
-    let decision = report_decision(final_score, &findings, &policy);
-    let (observed_conformance_level, conformance_decision, conformance_blockers) =
-        conformance_summary(&decision, &findings);
     let git = git_summary(root, changed);
     let dirty_worktree = git.dirty_worktree.unwrap_or(false);
     let proof_receipts = load_proof_receipts(root, options.proof_receipts.as_deref())?;
@@ -266,8 +295,7 @@ fn run_audit_inner(
     let mut report = Report {
         report_fingerprint: "sha256:pending".into(),
         input_fingerprint: input_fingerprint(&ctx),
-        policy_fingerprint: file_fingerprint(&root.join("agent/audit-policy.toml"))
-            .unwrap_or_else(missing_sha256),
+        policy_fingerprint,
         manifest_fingerprints: manifest_fingerprints(root),
         dirty_worktree,
         generated_at: started_at(),
@@ -280,9 +308,9 @@ fn run_audit_inner(
         target_stack_id: versions.target_stack_id,
         target_stack: TARGET_STACK.into(),
         claimed_conformance_level: "HL3".into(),
-        observed_conformance_level,
-        conformance_decision,
-        conformance_blockers,
+        observed_conformance_level: String::new(),
+        conformance_decision: String::new(),
+        conformance_blockers: vec![],
         repo: root.display().to_string(),
         run_id: Some(run_id()),
         started_at: Some(started_at()),
@@ -299,9 +327,9 @@ fn run_audit_inner(
         },
         score: final_score,
         raw_score,
-        decision: Some(decision),
+        decision: None,
         git: Some(git),
-        policy: Some(policy),
+        policy: Some(policy.clone()),
         proof_receipts,
         caps_applied,
         hard_rules: CAPS
@@ -328,6 +356,8 @@ fn run_audit_inner(
         findings,
         agent_fix_queue,
     };
+    resolved_policy.require_current(root)?;
+    outcome::finalize(&mut report, None)?;
     report.report_fingerprint = report_fingerprint(&report);
     timings.total_ms = started.elapsed().as_millis();
     Ok((report, timings))
@@ -344,7 +374,7 @@ struct ReportVersions {
 fn report_versions(root: &Path) -> ReportVersions {
     let mut versions = ReportVersions {
         standard_version: STANDARD_VERSION.into(),
-        auditor_version: AUDITOR_VERSION.into(),
+        auditor_version: env!("CARGO_PKG_VERSION").into(),
         schema_version: SCHEMA_VERSION.into(),
         paper_edition: PAPER_EDITION.into(),
         target_stack_id: TARGET_STACK_ID.into(),
@@ -353,10 +383,6 @@ fn report_versions(root: &Path) -> ReportVersions {
         if let Ok(value) = toml::from_str::<toml::Value>(&text) {
             versions.standard_version =
                 toml_string(&value, "standard_version").unwrap_or(versions.standard_version);
-            versions.auditor_version =
-                toml_string(&value, "auditor_version").unwrap_or(versions.auditor_version);
-            versions.schema_version =
-                toml_string(&value, "schema_version").unwrap_or(versions.schema_version);
             versions.paper_edition =
                 toml_string(&value, "paper_edition").unwrap_or(versions.paper_edition);
             versions.target_stack_id =
@@ -404,119 +430,6 @@ pub fn rebuild_agent_fix_queue(report: &mut Report) {
 fn attach_ux_report_artifact(root: &Path, mut readiness: UxQaReadiness) -> UxQaReadiness {
     readiness.artifact = ux_artifact::load_report_summary(root);
     readiness
-}
-
-fn load_policy(root: &Path) -> Result<PolicySummary> {
-    use serde::Deserialize;
-    #[derive(Debug, Deserialize)]
-    struct AuditPolicyFile {
-        #[serde(default = "default_minimum_score")]
-        minimum_score: i32,
-        #[serde(default)]
-        fail_on: Vec<String>,
-        #[serde(default)]
-        advisory_on: Vec<String>,
-    }
-
-    fn default_minimum_score() -> i32 {
-        85
-    }
-
-    let path = root.join("agent/audit-policy.toml");
-    let parsed = match std::fs::read_to_string(&path) {
-        Ok(text) => toml::from_str::<AuditPolicyFile>(&text)
-            .map_err(|err| anyhow::anyhow!("invalid audit policy {}: {err}", path.display()))?,
-        Err(_) => AuditPolicyFile {
-            minimum_score: default_minimum_score(),
-            fail_on: vec!["critical".into(), "high".into()],
-            advisory_on: vec!["medium".into(), "low".into()],
-        },
-    };
-    validate_policy_severities("fail_on", &parsed.fail_on)?;
-    validate_policy_severities("advisory_on", &parsed.advisory_on)?;
-    Ok(PolicySummary {
-        path: path.display().to_string(),
-        minimum_score: parsed.minimum_score,
-        fail_on: parsed.fail_on,
-        advisory_on: parsed.advisory_on,
-        mode: Some("standard".into()),
-        standard_version: Some(STANDARD_VERSION.into()),
-        auditor_version: Some(AUDITOR_VERSION.into()),
-        schema_version: Some(SCHEMA_VERSION.into()),
-        paper_edition: Some(PAPER_EDITION.into()),
-        target_stack: Some(TARGET_STACK_ID.into()),
-    })
-}
-
-fn validate_policy_severities(field: &str, severities: &[String]) -> Result<()> {
-    for severity in severities {
-        if !matches!(
-            severity.as_str(),
-            "critical" | "high" | "medium" | "low" | "info"
-        ) {
-            anyhow::bail!(
-                "invalid audit policy severity `{severity}` in {field}; expected critical, high, medium, low, or info"
-            );
-        }
-    }
-    Ok(())
-}
-
-pub fn report_decision(score: i32, findings: &[Finding], policy: &PolicySummary) -> ReportDecision {
-    let hard_findings = findings
-        .iter()
-        .filter(|f| {
-            policy
-                .fail_on
-                .iter()
-                .any(|severity| severity == &f.severity)
-        })
-        .count();
-    let soft_findings = findings.len().saturating_sub(hard_findings);
-    let passed = score >= policy.minimum_score && hard_findings == 0;
-    ReportDecision {
-        status: if passed { "pass".into() } else { "fail".into() },
-        minimum_score: policy.minimum_score,
-        passed,
-        hard_findings,
-        soft_findings,
-        ratchet: Some(ReportRatchet {
-            baseline_score: score,
-            allowed_drop: 0,
-            passed,
-            score_delta: 0,
-            baseline_report_fingerprint: missing_sha256(),
-            baseline_input_fingerprint: missing_sha256(),
-            baseline_policy_fingerprint: missing_sha256(),
-            new_caps: vec![],
-            new_hard_findings: vec![],
-            policy_changed: false,
-        }),
-    }
-}
-
-fn conformance_summary(
-    decision: &ReportDecision,
-    findings: &[Finding],
-) -> (String, String, Vec<String>) {
-    let blockers: Vec<String> = findings
-        .iter()
-        .filter(|finding| matches!(finding.severity.as_str(), "critical" | "high"))
-        .map(|finding| {
-            format!(
-                "{} on {}",
-                finding.rule_id.as_deref().unwrap_or(&finding.check_id),
-                finding.path
-            )
-        })
-        .collect();
-    if decision.passed {
-        ("HL3".into(), "pass".into(), blockers)
-    } else if blockers.is_empty() {
-        ("HL2".into(), "review".into(), blockers)
-    } else {
-        ("HL2".into(), "block".into(), blockers)
-    }
 }
 
 fn git_summary(root: &Path, changed: &[PathBuf]) -> GitSummary {
