@@ -5,6 +5,21 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 cd "$REPO_ROOT"
 
+if [[ -f agent/badge.toml ]]; then
+  log "audit lane: jankurai badge --check"
+  grep -q 'jankurai-badge:start' README.md
+  test -s agent/jankurai-badge.svg
+  test -s agent/jankurai-badge.json
+  cargo run --locked --offline -p jankurai -- badge --check \
+    --score agent/baselines/main.repo-score.json \
+    --out agent/jankurai-badge.svg \
+    --json-out agent/jankurai-badge.json \
+    --readme README.md \
+    --link agent/jankurai-badge.json \
+    --update-readme \
+    --label jankurai
+fi
+
 mkdir -p .jankurai
 log "audit lane: exact-source full audit -> .jankurai/repo-score.{json,md}"
 cargo run --locked --offline -p jankurai -- audit . \
@@ -26,18 +41,3 @@ jq -e --slurpfile baseline agent/baselines/main.repo-score.json '
 
 assert_artifact .jankurai/repo-score.json
 assert_artifact .jankurai/repo-score.md
-
-if [[ -f agent/badge.toml ]]; then
-  log "audit lane: jankurai badge --check"
-  grep -q 'jankurai-badge:start' README.md
-  test -s agent/jankurai-badge.svg
-  test -s agent/jankurai-badge.json
-  cargo run --locked --offline -p jankurai -- badge --check \
-    --score agent/baselines/main.repo-score.json \
-    --out agent/jankurai-badge.svg \
-    --json-out agent/jankurai-badge.json \
-    --readme README.md \
-    --link agent/jankurai-badge.json \
-    --update-readme \
-    --label jankurai
-fi
