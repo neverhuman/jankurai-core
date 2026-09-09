@@ -9,6 +9,18 @@
       "command": "just fast",
       "purpose": "verify app surfaces remain routed through the audit"
     },
+    ".agents/": {
+      "command": "just score",
+      "purpose": "verify generated agent adapter routes remain owned"
+    },
+    ".claude/": {
+      "command": "just score",
+      "purpose": "verify generated Claude adapter routes remain owned"
+    },
+    ".cursor/": {
+      "command": "just score",
+      "purpose": "verify generated Cursor adapter routes remain owned"
+    },
     "agent/": {
       "command": "just score",
       "purpose": "verify manifests remain parseable and authoritative"

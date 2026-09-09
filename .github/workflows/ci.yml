@@ -33,7 +33,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@b3b07ba8b418998c39fb20f53e8b695cdcc8de1b # stable
         with:
-          toolchain: stable
+          toolchain: 1.97.1
           components: rustfmt, clippy
       - name: Install nextest
         uses: taiki-e/install-action@9ca1734d8940023f074414ee621fd530c4ce10f2 # v2.62.45
@@ -79,6 +79,7 @@ jobs:
         with:
           node-version: 24
           package-manager-cache: false
+      - run: node --test scripts/ci-aggregate.test.mjs
       - run: bash ops/ci/aggregate.sh
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}

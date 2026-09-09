@@ -688,6 +688,172 @@ fn managed_pre_commit_blocks_failing_standard_audit() {
 }
 
 #[test]
+fn managed_pre_commit_retains_failed_report_after_prior_pass() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    fs::write(dir.path().join("README.md"), "fixture\n").unwrap();
+    git(dir.path(), &["add", "README.md"]);
+    git(dir.path(), &["commit", "-m", "seed"]);
+    assert_command_success(
+        Command::new(binary_path())
+            .arg("hooks")
+            .arg("install")
+            .arg(dir.path())
+            .arg("--yes"),
+    );
+
+    let pass_stub = dir.path().join("passing-auditor");
+    fs::write(
+        &pass_stub,
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+json=""
+md=""
+history=""
+prev=""
+for arg in "$@"; do
+  if [ "$prev" = "--json" ]; then json="$arg"; fi
+  if [ "$prev" = "--md" ]; then md="$arg"; fi
+  if [ "$prev" = "--score-history" ]; then history="$arg"; fi
+  prev="$arg"
+done
+test -n "$json"
+printf '%s\n' '{"score":95,"raw_score":95,"findings":[],"caps_applied":[],"decision":{"status":"pass","passed":true,"minimum_score":85,"hard_findings":0,"soft_findings":0}}' > "$json"
+if [ -n "$md" ]; then printf 'score 95 pass\n' > "$md"; fi
+if [ -n "$history" ]; then printf '%s\n' '{"score":95,"decision":{"passed":true}}' >> "$history"; fi
+"#,
+    )
+    .unwrap();
+    let fail_stub = dir.path().join("failing-auditor");
+    fs::write(
+        &fail_stub,
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+json=""
+md=""
+history=""
+prev=""
+for arg in "$@"; do
+  if [ "$prev" = "--json" ]; then json="$arg"; fi
+  if [ "$prev" = "--md" ]; then md="$arg"; fi
+  if [ "$prev" = "--score-history" ]; then history="$arg"; fi
+  prev="$arg"
+done
+test -n "$json"
+printf '%s\n' '{"score":70,"raw_score":70,"findings":[{"severity":"high"}],"caps_applied":[],"decision":{"status":"fail","passed":false,"minimum_score":85,"hard_findings":1,"soft_findings":0}}' > "$json"
+if [ -n "$md" ]; then printf 'score 70 fail\n' > "$md"; fi
+if [ -n "$history" ]; then printf '%s\n' '{"score":70,"decision":{"passed":false}}' >> "$history"; fi
+exit 1
+"#,
+    )
+    .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        for stub in [&pass_stub, &fail_stub] {
+            let mut permissions = fs::metadata(stub).unwrap().permissions();
+            permissions.set_mode(0o755);
+            fs::set_permissions(stub, permissions).unwrap();
+        }
+    }
+
+    let env_path = dir.path().join(".git/jankurai/env");
+    let mut env = fs::read_to_string(&env_path).unwrap();
+    env.push_str(&format!("JANKURAI_BIN='{}'\n", pass_stub.display()));
+    fs::write(&env_path, env).unwrap();
+    fs::write(dir.path().join("PASS.md"), "pass change\n").unwrap();
+    git(dir.path(), &["add", "PASS.md"]);
+    git(
+        dir.path(),
+        &["commit", "-m", "pass with controlled auditor"],
+    );
+
+    let report_json = dir
+        .path()
+        .join("target/jankurai/hooks/pre-commit-score.json");
+    let report_md = dir.path().join("target/jankurai/hooks/pre-commit-score.md");
+    let pass_json = fs::read_to_string(&report_json).unwrap();
+    assert!(pass_json.contains("\"score\":95"), "{pass_json}");
+    assert_eq!(
+        fs::read_to_string(&report_md).unwrap().trim(),
+        "score 95 pass"
+    );
+
+    let mut env = fs::read_to_string(&env_path).unwrap();
+    env = env.replace(
+        &format!("JANKURAI_BIN='{}'\n", pass_stub.display()),
+        &format!("JANKURAI_BIN='{}'\n", fail_stub.display()),
+    );
+    fs::write(&env_path, env).unwrap();
+    fs::write(dir.path().join("FAIL.md"), "fail change\n").unwrap();
+    git(dir.path(), &["add", "FAIL.md"]);
+    let output = Command::new("git")
+        .args(["commit", "-m", "should retain failed report"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    assert!(
+        !output.status.success(),
+        "failing auditor must block the commit"
+    );
+
+    let failed_json = fs::read_to_string(&report_json).unwrap();
+    let failed_md = fs::read_to_string(&report_md).unwrap();
+    assert!(
+        failed_json.contains("\"score\":70"),
+        "failed audit JSON must replace the prior pass report\n{failed_json}"
+    );
+    assert!(
+        !failed_json.contains("\"score\":95"),
+        "prior pass report must not remain as the latest artifact\n{failed_json}"
+    );
+    assert_eq!(failed_md.trim(), "score 70 fail");
+    assert!(
+        !dir.path().join(".git/jankurai/hooks").exists()
+            || fs::read_dir(dir.path().join("target/jankurai/hooks"))
+                .unwrap()
+                .filter_map(|entry| entry.ok())
+                .all(|entry| !entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".pre-commit.")),
+        "work directory must be cleaned by the EXIT trap"
+    );
+}
+
+#[test]
+fn owner_map_template_is_unique_and_covers_generated_adapters() {
+    let text = include_str!("../templates/agent/owner-map.json");
+    assert_eq!(
+        text.matches("\"tools/\"").count(),
+        1,
+        "duplicate tools/ keys emit invalid JSON for strict readers"
+    );
+    let value: serde_json::Value = serde_json::from_str(text).expect("owner-map must parse");
+    let owners = value["owners"].as_object().expect("owners object required");
+    for prefix in [".agents/", ".claude/", ".cursor/", "tools/"] {
+        assert!(
+            owners.contains_key(prefix),
+            "missing owner-map route for generated path {prefix}"
+        );
+    }
+    assert_eq!(owners["tools/"], "tools");
+
+    let test_map: serde_json::Value =
+        serde_json::from_str(include_str!("../templates/agent/test-map.json"))
+            .expect("test-map must parse");
+    let tests = test_map["tests"]
+        .as_object()
+        .expect("tests object required");
+    for prefix in [".agents/", ".claude/", ".cursor/"] {
+        assert!(
+            tests.contains_key(prefix),
+            "missing test-map route for generated path {prefix}"
+        );
+    }
+}
+
+#[test]
 fn init_yolo_alias_is_rejected() {
     let dir = tempdir().unwrap();
     init_git_repo(dir.path());
