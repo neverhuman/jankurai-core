@@ -201,3 +201,153 @@ fail_lane_on = "high"
         .expect("gitleaks command evidence");
     assert_eq!(gitleaks["blocking"], true);
 }
+// These wrappers exercise record intake only; they do not claim scanner execution.
+fn run_fixture_records(
+    records: &str,
+    policy: &str,
+    extra_script: &str,
+) -> (std::process::Output, serde_json::Value) {
+    let repo = tempdir().unwrap();
+    fs::create_dir_all(repo.path().join("tools")).unwrap();
+    fs::create_dir_all(repo.path().join("agent")).unwrap();
+    fs::write(repo.path().join("agent/security-policy.toml"), policy).unwrap();
+    fs::write(repo.path().join("records.txt"), records).unwrap();
+    fs::write(
+        repo.path().join("tools/security-lane.sh"),
+        format!("#!/usr/bin/env bash\ncat records.txt\nprintf '\\n'\n{extra_script}\nexit 0\n"),
+    )
+    .unwrap();
+    let evidence_path = repo.path().join("out/evidence.json");
+    let output = Command::new(binary_path())
+        .arg("security")
+        .arg("run")
+        .arg(repo.path())
+        .args([
+            "--profile",
+            "ci",
+            "--strict",
+            "--script",
+            "tools/security-lane.sh",
+            "--out",
+        ])
+        .arg(&evidence_path)
+        .output()
+        .unwrap();
+    let value: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&evidence_path).unwrap()).unwrap();
+    validation::validate_value(repo.path(), ArtifactSchema::SecurityEvidence, &value).unwrap();
+    (output, value)
+}
+
+fn fixture_record(label: &str, status: &str, code: Option<i32>) -> String {
+    let mut row = serde_json::json!({
+        "label": label, "tool": "fixture-scan", "shell_command": "fixture-scan",
+        "status": status, "advisory": true,
+    });
+    if let Some(code) = code {
+        row["exit_code"] = code.into();
+    }
+    format!("jankurai-security-step={row}")
+}
+
+#[test]
+fn security_run_blocks_invalid_records_even_after_required_success() {
+    let policy = "[profiles.ci]\nrequired_tools = ['fixture-scan']\n";
+    let success = fixture_record("good", "ran", Some(0));
+    for invalid in [
+        "jankurai-security-step={".to_string(),
+        "jankurai-security-step={}".to_string(),
+        fixture_record("bad", "ran", Some(42)),
+        fixture_record("bad", "ran", None),
+        fixture_record("bad", "failed", Some(0)),
+        fixture_record("bad", "skipped", Some(0)),
+        fixture_record("bad", "unknown", Some(0)),
+    ] {
+        for records in [
+            format!("{success}\n{invalid}"),
+            format!("{invalid}\n{success}"),
+        ] {
+            let (output, value) = run_fixture_records(&records, policy, "");
+            assert!(!output.status.success(), "{records}");
+            assert_eq!(value["exit_code"], 1);
+            assert!(value["commands"].as_array().unwrap().iter().any(|row| {
+                row["blocking"] == true
+                    && row["label"]
+                        .as_str()
+                        .unwrap()
+                        .starts_with("invalid-security-record")
+            }));
+        }
+    }
+}
+
+#[test]
+fn security_run_blocks_conflicting_advisory_records() {
+    let policy = "[profiles.ci]\nadvisory_tools = ['fixture-scan']\n";
+    let success = fixture_record("same", "ran", Some(0));
+    let failure = fixture_record("same", "failed", Some(42));
+    for records in [
+        format!("{success}\n{failure}"),
+        format!("{failure}\n{success}"),
+    ] {
+        let (output, value) = run_fixture_records(&records, policy, "");
+        assert!(!output.status.success());
+        assert_eq!(value["exit_code"], 1);
+    }
+}
+
+#[test]
+fn security_run_preserves_valid_standalone_advisory_outcomes() {
+    let policy = "[profiles.ci]\nadvisory_tools = ['fixture-scan']\n";
+    for (status, code) in [("ran", Some(0)), ("failed", Some(42)), ("skipped", None)] {
+        let (output, value) =
+            run_fixture_records(&fixture_record("scan", status, code), policy, "");
+        assert!(output.status.success(), "{:?}", output);
+        assert_eq!(value["exit_code"], 0);
+        assert_eq!(value["commands"][0]["blocking"], false);
+    }
+}
+
+#[test]
+fn security_run_one_of_requires_a_successful_member() {
+    let policy = "[profiles.ci]\nadvisory_tools = ['fixture-scan']\nrequire_one_of = [['fixture-scan', 'other-scan']]\n";
+    for (status, code, expected_success) in [
+        ("ran", Some(0), true),
+        ("failed", Some(42), false),
+        ("skipped", None, false),
+    ] {
+        let (output, value) =
+            run_fixture_records(&fixture_record("scan", status, code), policy, "");
+        assert_eq!(output.status.success(), expected_success);
+        assert_eq!(value["exit_code"], if expected_success { 0 } else { 1 });
+    }
+}
+
+#[test]
+fn security_run_required_failure_stays_blocking_after_a_later_success() {
+    let policy = "[profiles.ci]\nrequired_tools = ['fixture-scan']\n";
+    let records = format!(
+        "{}\n{}",
+        fixture_record("first", "failed", Some(42)),
+        fixture_record("second", "ran", Some(0)),
+    );
+    let (output, value) = run_fixture_records(&records, policy, "");
+    assert!(!output.status.success());
+    assert_eq!(value["exit_code"], 1);
+    assert_eq!(value["commands"][0]["blocking"], true);
+    assert_eq!(value["commands"][1]["blocking"], false);
+}
+
+#[test]
+fn security_run_rejects_non_utf8_wrapper_output() {
+    let policy = "[profiles.ci]\nrequired_tools = ['fixture-scan']\n";
+    for script in ["printf '\\377'", "printf '\\377' >&2"] {
+        let (output, value) =
+            run_fixture_records(&fixture_record("scan", "ran", Some(0)), policy, script);
+        assert!(!output.status.success());
+        assert_eq!(value["exit_code"], 1);
+        assert!(value["commands"].as_array().unwrap().iter().any(|row| {
+            row["blocking"] == true && row["label"].as_str().unwrap().contains("non-UTF-8")
+        }));
+    }
+}

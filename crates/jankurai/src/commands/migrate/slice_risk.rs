@@ -625,14 +625,22 @@ fn candidate_source_files(repo: &Path) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
     for entry in WalkDir::new(repo)
         .into_iter()
-        .filter_entry(|entry| !entry.file_type().is_dir() || !is_skipped_dir(entry.path()))
+        .filter_entry(|entry| {
+            entry
+                .path()
+                .strip_prefix(repo)
+                .is_ok_and(|relative| !entry.file_type().is_dir() || !is_skipped_dir(relative))
+        })
         .filter_map(Result::ok)
     {
         let path = entry.path();
         if entry.file_type().is_dir() {
             continue;
         }
-        if !is_candidate_source(path) || is_ignored_path(path) {
+        let relative = path
+            .strip_prefix(repo)
+            .with_context(|| format!("source path is outside repository: {}", path.display()))?;
+        if !is_candidate_source(path) || is_ignored_path(relative) {
             continue;
         }
         files.push(path.to_path_buf());

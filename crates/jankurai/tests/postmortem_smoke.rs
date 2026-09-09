@@ -130,3 +130,62 @@ fn postmortem_list_show_and_read_are_read_only() {
         .count();
     assert_eq!(before, after);
 }
+
+fn seed_postmortem_inventory(repo: &std::path::Path) {
+    let records = repo.join(".jankurai/postmortems");
+    fs::create_dir_all(&records).unwrap();
+    for name in ["alpha.toml", "beta.toml"] {
+        fs::copy(fixture(name), records.join(name)).unwrap();
+    }
+}
+
+fn assert_postmortem_inventory(repo: &PathBuf, args: &[&str], expected: usize) {
+    let (output, _dir, json_path, _) = run_postmortem_report(repo, args);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(json_path).unwrap()).unwrap();
+    assert_eq!(report["records_total"], expected, "{}", repo.display());
+}
+
+#[test]
+fn postmortem_discovery_ignores_excluded_names_above_repo_root() {
+    for name in ["ordinary", ".git", "target"] {
+        let container = tempdir().unwrap();
+        for repo in [
+            container.path().join(name).join("repo"),
+            container.path().join("named-root").join(name),
+        ] {
+            seed_postmortem_inventory(&repo);
+            assert_postmortem_inventory(&repo, &["list"], 2);
+        }
+    }
+}
+
+#[test]
+fn postmortem_discovery_keeps_exclusions_below_owning_repo() {
+    let container = tempdir().unwrap();
+    let repo = container.path().join("target").join("repo");
+    seed_postmortem_inventory(&repo);
+    for name in [".git", "target"] {
+        for prefix in [name.to_string(), format!("nested/{name}")] {
+            let path = repo
+                .join(".jankurai/postmortems")
+                .join(prefix)
+                .join("bad.toml");
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, "this excluded record is intentionally invalid TOML").unwrap();
+        }
+    }
+    assert_postmortem_inventory(&repo, &["list"], 2);
+    for name in [".git", "target"] {
+        let selected_root = format!("{name}/records");
+        let records = repo.join(&selected_root);
+        fs::create_dir_all(&records).unwrap();
+        fs::copy(fixture("alpha.toml"), records.join("alpha.toml")).unwrap();
+        assert_postmortem_inventory(&repo, &["list", "--root", &selected_root], 0);
+    }
+}
