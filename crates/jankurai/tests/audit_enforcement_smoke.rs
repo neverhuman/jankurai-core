@@ -76,6 +76,33 @@ fn advisory_mode_keeps_failed_decision_nonblocking() {
 }
 
 #[test]
+fn omitted_fail_on_defaults_to_critical_and_high() {
+    let repo = tempdir().unwrap();
+    write_base_repo(repo.path());
+    fs::write(repo.path().join("agent/audit-policy.toml"), "minimum_score = 0\n").unwrap();
+
+    let report = jankurai::audit::run_audit(repo.path(), &[]).unwrap();
+    assert_eq!(
+        report.policy.as_ref().unwrap().fail_on,
+        vec!["critical".to_string(), "high".to_string()]
+    );
+}
+
+#[test]
+fn explicit_empty_fail_on_stays_empty() {
+    let repo = tempdir().unwrap();
+    write_base_repo(repo.path());
+    fs::write(
+        repo.path().join("agent/audit-policy.toml"),
+        "minimum_score = 0\nfail_on = []\nadvisory_on = []\n",
+    )
+    .unwrap();
+
+    let report = jankurai::audit::run_audit(repo.path(), &[]).unwrap();
+    assert!(report.policy.as_ref().unwrap().fail_on.is_empty());
+}
+
+#[test]
 fn fail_on_policy_controls_hard_findings() {
     let repo = tempdir().unwrap();
     write_base_repo(repo.path());
