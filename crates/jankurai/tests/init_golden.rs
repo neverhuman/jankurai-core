@@ -565,15 +565,66 @@ edition = "2021"
     )
     .unwrap();
     git(dir.path(), &["add", "docs/architecture/README.md"]);
-    git_env(
-        dir.path(),
-        &["commit", "-m", "Touch architecture docs"],
-        &[("JANKURAI_SKIP_HOOKS", "1")],
-    );
+    let stub = dir.path().join("passing-auditor");
+    fs::write(
+        &stub,
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+json=""
+md=""
+history=""
+prev=""
+for arg in "$@"; do
+  if [ "$prev" = "--json" ]; then json="$arg"; fi
+  if [ "$prev" = "--md" ]; then md="$arg"; fi
+  if [ "$prev" = "--score-history" ]; then history="$arg"; fi
+  prev="$arg"
+done
+test -n "$json"
+printf '%s\n' '{"score":90,"raw_score":90,"findings":[],"caps_applied":[],"decision":{"status":"pass","passed":true,"minimum_score":85,"hard_findings":0,"soft_findings":0}}' > "$json"
+if [ -n "$md" ]; then printf 'score 90\n' > "$md"; fi
+if [ -n "$history" ]; then printf '%s\n' '{"score":90}' >> "$history"; fi
+"#,
+    )
+    .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = fs::metadata(&stub).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&stub, permissions).unwrap();
+    }
+    let env_path = dir.path().join(".git/jankurai/env");
+    let mut env = fs::read_to_string(&env_path).unwrap();
+    env.push_str(&format!("JANKURAI_BIN='{}'\n", stub.display()));
+    fs::write(&env_path, env).unwrap();
+    git(dir.path(), &["commit", "-m", "Touch architecture docs"]);
     let second_message = git_stdout(dir.path(), &["log", "-1", "--format=%B"]);
     assert!(
-        second_message.contains("Touch architecture docs"),
+        second_message.contains("Jankurai-Score:"),
         "{second_message}"
+    );
+    assert!(dir.path().join(".git/jankurai/last-score.env").is_file());
+    assert!(dir
+        .path()
+        .join("target/jankurai/hooks/pre-commit-score.json")
+        .is_file());
+    assert!(dir
+        .path()
+        .join("target/jankurai/hooks/pre-commit-score.md")
+        .is_file());
+    let history = fs::read_to_string(
+        dir.path()
+            .join("target/jankurai/hooks/pre-commit-score-history.jsonl"),
+    )
+    .unwrap();
+    assert!(
+        history
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .count()
+            >= 1,
+        "{history}"
     );
 }
 
