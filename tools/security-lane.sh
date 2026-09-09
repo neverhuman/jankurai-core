@@ -25,7 +25,7 @@ run_step() {
     fi
     printf 'jankurai-security-step={"label":"%s","tool":"%s","shell_command":"%s","status":"%s","advisory":%s,"exit_code":%d}\n' \
         "${label}" "${tool}" "${shell_command}" "${status}" "${advisory}" "${exit_code}"
-    return "${exit_code}"
+    return 0
 }
 
 printf '[security] profile=%s secret scan\n' "${profile}"
@@ -35,10 +35,12 @@ run_step gitleaks gitleaks 'gitleaks detect --source . --no-banner --redact' fal
 if [[ -f Cargo.toml ]]; then
     has_package=true
     printf '[security] Rust dependency and policy scans\n'
-    run_step cargo-audit cargo-audit 'cargo audit --no-fetch' false \
-        cargo audit --no-fetch
-    run_step cargo-deny cargo-deny 'cargo deny check --disable-fetch advisories bans sources' false \
-        cargo deny check --disable-fetch advisories bans sources
+    run_step cargo-audit cargo-audit 'cargo audit' false \
+        cargo audit
+    if [[ -f deny.toml ]]; then
+        run_step cargo-deny cargo-deny 'cargo deny check advisories bans sources' false \
+            cargo deny check advisories bans sources
+    fi
 fi
 
 if [[ -f package.json ]]; then

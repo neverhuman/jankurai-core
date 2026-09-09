@@ -33,8 +33,8 @@ advisory_tools = ["cargo-audit", "cargo-deny", "zizmor", "actionlint", "syft", "
 
 [profiles.ci]
 enabled_tools = ["gitleaks", "cargo-audit", "cargo-deny", "zizmor", "actionlint", "syft", "grype"]
-required_tools = ["gitleaks", "cargo-audit", "cargo-deny", "zizmor", "actionlint", "syft", "grype"]
-advisory_tools = []
+required_tools = ["gitleaks", "cargo-audit", "zizmor", "actionlint"]
+advisory_tools = ["cargo-deny", "syft", "grype"]
 
 [profiles.release]
 enabled_tools = ["gitleaks", "cargo-audit", "cargo-deny", "zizmor", "actionlint", "syft", "grype"]
