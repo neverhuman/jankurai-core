@@ -7,6 +7,6 @@ score = "agent/baselines/main.repo-score.json"
 svg = "agent/jankurai-badge.svg"
 json = "agent/jankurai-badge.json"
 readme = "README.md"
-link = "agent/baselines/main.repo-score.json"
+link = "agent/jankurai-badge.json"
 update_readme = true
 label = "jankurai"
