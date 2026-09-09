@@ -27,9 +27,17 @@ jq -e --slurpfile baseline agent/baselines/main.repo-score.json '
 assert_artifact .jankurai/repo-score.json
 assert_artifact .jankurai/repo-score.md
 
-if [[ -f agent/badge.toml && -f agent/jankurai-badge.svg ]]; then
-  log "audit lane: first-party badge presence"
+if [[ -f agent/badge.toml ]]; then
+  log "audit lane: jankurai badge --check"
   grep -q 'jankurai-badge:start' README.md
   test -s agent/jankurai-badge.svg
   test -s agent/jankurai-badge.json
+  cargo run --locked --offline -p jankurai -- badge --check \
+    --score agent/baselines/main.repo-score.json \
+    --out agent/jankurai-badge.svg \
+    --json-out agent/jankurai-badge.json \
+    --readme README.md \
+    --link agent/jankurai-badge.json \
+    --update-readme \
+    --label jankurai
 fi

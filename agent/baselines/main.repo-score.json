@@ -1,6 +1,6 @@
 {
-  "report_fingerprint": "sha256:0fa9867df30491cf13ad0156abd4d6597c6604daadd83816d8e5d4532d3cc56f",
-  "input_fingerprint": "sha256:4a630f70dab73e3ff45b22d8b50e38196c213c3455271a4c5e246cf53b53c5ce",
+  "report_fingerprint": "sha256:6d0f1fcd900b837b210888c41fcc4198c497eadb3f31d263829dfa6d7235784f",
+  "input_fingerprint": "sha256:1a5e199387b3f78bbe742ce20d22f92a06922a94b04176e857a1396de31592d7",
   "policy_fingerprint": "sha256:d75b2053c5c7bd6eb5d9c41b85f346ba60d1941d88e6fedef9d7d258266a6432",
   "manifest_fingerprints": {
     "owner_map": "sha256:0210dabff37854a5e5c1ecc04c77f93f189d71e51a5fb3876838fdef0f28f604",
@@ -8,14 +8,14 @@
     "generated_zones": "sha256:0a1e98fd93dec97d0146d9e1916e3a03cabede673959ef5c52fc76492cba2a36",
     "boundaries": "sha256:d3c49b1a3b22dce2ee579d733e9e16e98bd91c6017ab1a9842847fa25838f46e",
     "proof_lanes": "sha256:ca8e1db1757ad65f8d369de4f5612f59687d4737fb872e8cd3e2c7573211c1b3",
-    "standard_version": "sha256:21a802d75d5af1c8f68aca3495a1d1edcff3cd322841ce22f328868398b378c6"
+    "standard_version": "sha256:03db81d94d767c7d59497c025fc5790194b71f3c99d4f7d1945b404e6ed69f28"
   },
   "dirty_worktree": false,
-  "generated_at": "1784612798",
+  "generated_at": "1788928013",
   "schema_url": "schemas/repo-score.schema.json",
   "standard": "jankurai",
   "standard_version": "0.9.0",
-  "auditor_version": "1.6.0",
+  "auditor_version": "1.7.0",
   "schema_version": "1.9.0",
   "paper_edition": "2026.05-ed8",
   "target_stack_id": "rust-ts-vite-react-postgres-bounded-python",
@@ -25,9 +25,9 @@
   "conformance_decision": "pass",
   "conformance_blockers": [],
   "repo": ".",
-  "run_id": "1784612798",
-  "started_at": "1784612798",
-  "elapsed_ms": 39206,
+  "run_id": "1788928013",
+  "started_at": "1788928013",
+  "elapsed_ms": 6337,
   "scope": {
     "mode": "full",
     "paths": []
@@ -36,10 +36,10 @@
   "raw_score": 95,
   "decision": {
     "status": "advisory",
-    "minimum_score": 95,
+    "minimum_score": 85,
     "passed": true,
     "hard_findings": 0,
-    "soft_findings": 0,
+    "soft_findings": 1,
     "ratchet": {
       "baseline_score": 95,
       "allowed_drop": 0,
@@ -54,7 +54,7 @@
     }
   },
   "git": {
-    "head": "ef65d51",
+    "head": "8505079",
     "base": null,
     "changed_files": 0,
     "mode": "full",
@@ -62,8 +62,9 @@
   },
   "policy": {
     "path": "./agent/audit-policy.toml",
-    "minimum_score": 95,
+    "minimum_score": 85,
     "fail_on": [
+      "critical",
       "high"
     ],
     "advisory_on": [
@@ -72,7 +73,7 @@
     ],
     "mode": "advisory",
     "standard_version": "0.9.0",
-    "auditor_version": "1.6.11",
+    "auditor_version": "1.7.0",
     "schema_version": "1.9.0",
     "paper_edition": "2026.05-ed8",
     "target_stack": "rust-ts-vite-react-postgres-bounded-python"
@@ -313,13 +314,9 @@
         "web e2e lane present or no web surface",
         "rendered UX QA lane present or no web surface",
         "DOM geometry UX QA runtime found",
-        "Rust property/integration tests present or no Rust surface",
-        "proofbind artifact found: surfaces=136 missing=136 high_or_critical_missing=80 verdict=review"
+        "Rust property/integration tests present or no Rust surface"
       ],
-      "notes": [
-        "proofbind reports 136 unresolved obligation(s)",
-        "proofbind reports 80 missing high/critical semantic proof obligation(s)"
-      ]
+      "notes": []
     },
     {
       "name": "Security and supply-chain posture",
@@ -423,12 +420,13 @@
     {
       "name": "Build speed signals",
       "weight": 4,
-      "score": 85,
-      "weighted_points": 3.4,
+      "score": 95,
+      "weighted_points": 3.8,
       "evidence": [
         "build acceleration markers found",
         "targeted test/build commands found",
         "locked dependency graph present",
+        "CI cache hint found",
         "fast lane uses targeted commands and target-only audit artifacts",
         "explicit cache marker plus narrow per-package target found"
       ],
@@ -1028,23 +1026,7 @@
       "vibe-coverage"
     ]
   },
-  "security_evidence": {
-    "artifact": {
-      "path": "target/jankurai/security/evidence.json",
-      "envelope_exit_code": 0,
-      "elapsed_ms": 5199,
-      "wrapper_strict": true,
-      "profile": "ci",
-      "commands_ran": 7,
-      "commands_skipped": 0,
-      "commands_failed": 0,
-      "required_commands_skipped": 0,
-      "required_commands_failed": 0,
-      "blocking_commands": [],
-      "generated_at": "1784612717",
-      "git_head": "ef65d517628b9d9f5f6543298abb283b37112f5a"
-    }
-  },
+  "security_evidence": {},
   "boundaries": {
     "artifact": {
       "path": "agent/boundaries.toml",
@@ -1062,9 +1044,9 @@
   "copy_code": {
     "schema_version": "1.1.0",
     "generated_by": "jankurai copy-code",
-    "generated_at": "2026-07-21T05:46:00.400216577+00:00",
+    "generated_at": "2026-09-09T04:26:47.010213702+00:00",
     "repo": ".",
-    "auditor_version": "1.6.11",
+    "auditor_version": "1.7.0",
     "status": "review",
     "policy": {
       "active_source_only": true,
@@ -1100,7 +1082,7 @@
       ]
     },
     "summary": {
-      "files_scanned": 468,
+      "files_scanned": 470,
       "files_considered": 122,
       "active_files": 122,
       "exact_file_classes": 0,
@@ -1711,8 +1693,8 @@
           {
             "path": "crates/jankurai/src/commands/badge.rs",
             "language": "rust",
-            "start_line": 717,
-            "end_line": 718,
+            "start_line": 721,
+            "end_line": 722,
             "unit_name": "escape_xml"
           },
           {
@@ -1994,15 +1976,15 @@
           {
             "path": "crates/jankurai/src/commands/badge.rs",
             "language": "rust",
-            "start_line": 687,
-            "end_line": 688,
+            "start_line": 691,
+            "end_line": 692,
             "unit_name": "resolve_path"
           },
           {
             "path": "crates/jankurai/src/commands/badge.rs",
             "language": "rust",
-            "start_line": 696,
-            "end_line": 697,
+            "start_line": 700,
+            "end_line": 701,
             "unit_name": "normalize_path"
           }
         ]
@@ -2310,8 +2292,8 @@
           {
             "path": "crates/jankurai/src/commands/badge.rs",
             "language": "rust",
-            "start_line": 717,
-            "end_line": 718,
+            "start_line": 721,
+            "end_line": 722,
             "unit_name": "escape_xml"
           },
           {
@@ -2604,11 +2586,46 @@
   "coverage_evidence": {
     "artifact": "target/jankurai/coverage/coverage-audit.json",
     "status": "missing",
-    "sources_total": 2,
+    "sources_total": 0,
     "sources_present": 0,
     "hard_findings": 0,
-    "soft_findings": 0
+    "soft_findings": 1
   },
-  "findings": [],
-  "agent_fix_queue": []
+  "findings": [
+    {
+      "severity": "medium",
+      "category": "test",
+      "path": "agent/coverage-sources.toml",
+      "problem": "coverage evidence lane is configured but has not been run",
+      "agent_fix": "run `cargo run -p jankurai -- coverage audit . --config agent/coverage-sources.toml --json target/jankurai/coverage/coverage-audit.json --md target/jankurai/coverage/coverage-audit.md`",
+      "evidence": [
+        "agent/coverage-sources.toml exists"
+      ],
+      "check_id": "HLT-008-FALSE-GREEN-RISK:coverage-evidence",
+      "hardness": "soft",
+      "confidence": 0.76,
+      "evidence_kind": "test",
+      "rerun_command": "cargo run -p jankurai -- coverage audit . --config agent/coverage-sources.toml --json target/jankurai/coverage/coverage-audit.json --md target/jankurai/coverage/coverage-audit.md",
+      "fingerprint": "sha256:d80fbd966029c39ef6dde3a73b2f46834e117ee6c16c85385ccf415d0d3719b5",
+      "rule_id": "HLT-008-FALSE-GREEN-RISK",
+      "tlr": "Verification",
+      "lane": "coverage-audit",
+      "docs_url": "docs/testing.md",
+      "owner": "agent",
+      "matched_term": "coverage-evidence",
+      "reason": "coverage evidence artifact `target/jankurai/coverage/coverage-audit.json`"
+    }
+  ],
+  "agent_fix_queue": [
+    {
+      "path": "agent/coverage-sources.toml",
+      "priority": "medium",
+      "rule_id": "HLT-008-FALSE-GREEN-RISK",
+      "tlr": "Verification",
+      "lane": "coverage-audit",
+      "owner": "agent",
+      "task": "run `cargo run -p jankurai -- coverage audit . --config agent/coverage-sources.toml --json target/jankurai/coverage/coverage-audit.json --md target/jankurai/coverage/coverage-audit.md`",
+      "why": "coverage evidence lane is configured but has not been run"
+    }
+  ]
 }
