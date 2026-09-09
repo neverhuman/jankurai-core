@@ -446,7 +446,7 @@ standard_version = "0.0.0"
     assert!(workflow.contains("target/jankurai/accepted-baseline.json"));
     assert!(workflow.contains("jankurai security run . --strict --profile ci"));
     assert!(workflow.contains("cargo install jankurai --locked"));
-    assert!(workflow.contains("jankurai audit . --mode ratchet"));
+    assert!(workflow.contains("jankurai audit . --full --no-badge --mode ratchet"));
     assert!(!workflow.contains("cargo run -p jankurai"));
 
     assert_command_success(
