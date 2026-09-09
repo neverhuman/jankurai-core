@@ -215,14 +215,18 @@ report_md="$report_dir/pre-commit-score.md"
 report_history_jsonl="$report_dir/pre-commit-score-history.jsonl"
 report_history_csv="$report_dir/pre-commit-score-history.csv"
 
+hook_mode="${JANKURAI_HOOK_MODE:-advisory}"
 audit_args=(
   audit .
-  --mode advisory
+  --mode "$hook_mode"
   --json "$report_json"
   --md "$report_md"
   --score-history "$report_history_jsonl"
   --score-history-csv "$report_history_csv"
 )
+if [ -n "${JANKURAI_FAIL_UNDER:-}" ]; then
+  audit_args+=(--fail-under "$JANKURAI_FAIL_UNDER")
+fi
 
 if [ -n "${JANKURAI_HISTORY_MIRROR:-}" ]; then
   audit_args+=(--score-history-mirror "$JANKURAI_HISTORY_MIRROR")

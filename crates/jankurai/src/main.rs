@@ -2538,6 +2538,7 @@ fn run_audit_and_write(args: AuditArgs) -> anyhow::Result<()> {
     if args.json == "-" && args.md == "-" {
         anyhow::bail!("use at most one stdout target; JSON and Markdown may not share stdout");
     }
+    jankurai::ui::audit_banner();
     let progress = jankurai::ui::CliProgress::new("scoring repository", 8);
     progress.tick("resolve changed paths");
     let (changed, changed_fast_effective, save_smart_state) =
@@ -2701,6 +2702,17 @@ fn run_audit_and_write(args: AuditArgs) -> anyhow::Result<()> {
         report.raw_score,
         report.findings.len()
     ));
+    let passed = report
+        .decision
+        .as_ref()
+        .map(|decision| decision.passed)
+        .unwrap_or(false);
+    jankurai::ui::audit_scorecard(
+        report.score,
+        report.raw_score,
+        report.findings.len(),
+        passed,
+    );
     eprintln!(
         "{}",
         jankurai::ui::epaint(
