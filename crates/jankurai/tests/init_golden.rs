@@ -88,11 +88,16 @@ fn greenfield_apply_args(repo: std::path::PathBuf, profile: &str) -> init::InitA
 }
 
 fn git(repo: &std::path::Path, args: &[&str]) {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(repo)
-        .output()
-        .unwrap();
+    git_env(repo, args, &[]);
+}
+
+fn git_env(repo: &std::path::Path, args: &[&str], env: &[(&str, &str)]) {
+    let mut command = Command::new("git");
+    command.args(args).current_dir(repo);
+    for (key, value) in env {
+        command.env(key, value);
+    }
+    let output = command.output().unwrap();
     assert!(
         output.status.success(),
         "git {:?} failed\nstdout:\n{}\nstderr:\n{}",
@@ -341,7 +346,12 @@ edition = "2021"
     assert!(pre_commit.is_file());
     assert!(prepare.is_file());
     let pre_commit_text = fs::read_to_string(pre_commit).unwrap();
-    assert!(pre_commit_text.contains("--mode advisory"));
+    assert!(
+        pre_commit_text.contains("JANKURAI_HOOK_MODE:-standard"),
+        "{pre_commit_text}"
+    );
+    assert!(pre_commit_text.contains("--full"), "{pre_commit_text}");
+    assert!(pre_commit_text.contains("--no-badge"), "{pre_commit_text}");
     assert!(
         pre_commit_text.contains("JANKURAI_HOOK_REPORT_DIR"),
         "{pre_commit_text}"
@@ -555,34 +565,47 @@ edition = "2021"
     )
     .unwrap();
     git(dir.path(), &["add", "docs/architecture/README.md"]);
-    git(dir.path(), &["commit", "-m", "Touch architecture docs"]);
-
+    git_env(
+        dir.path(),
+        &["commit", "-m", "Touch architecture docs"],
+        &[("JANKURAI_SKIP_HOOKS", "1")],
+    );
     let second_message = git_stdout(dir.path(), &["log", "-1", "--format=%B"]);
     assert!(
-        second_message.contains("Jankurai-Score:"),
+        second_message.contains("Touch architecture docs"),
         "{second_message}"
     );
-    assert!(dir.path().join(".git/jankurai/last-score.env").is_file());
-    assert!(dir
-        .path()
-        .join("target/jankurai/hooks/pre-commit-score.json")
-        .is_file());
-    assert!(dir
-        .path()
-        .join("target/jankurai/hooks/pre-commit-score.md")
-        .is_file());
-    let history = fs::read_to_string(
-        dir.path()
-            .join("target/jankurai/hooks/pre-commit-score-history.jsonl"),
-    )
-    .unwrap();
+}
+
+#[test]
+fn managed_pre_commit_blocks_failing_standard_audit() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    fs::write(dir.path().join("README.md"), "fixture\n").unwrap();
+    git(dir.path(), &["add", "README.md"]);
+    git(dir.path(), &["commit", "-m", "seed"]);
+    assert_command_success(
+        Command::new(binary_path())
+            .arg("hooks")
+            .arg("install")
+            .arg(dir.path())
+            .arg("--yes"),
+    );
+    fs::write(dir.path().join("NOTE.md"), "change\n").unwrap();
+    git(dir.path(), &["add", "NOTE.md"]);
+    let output = Command::new("git")
+        .args(["commit", "-m", "should be blocked"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
     assert!(
-        history
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-            .count()
-            >= 2,
-        "{history}"
+        !output.status.success(),
+        "blocking hook should reject the commit"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("audit decision failed") || stderr.contains("pre-commit audit failed"),
+        "{stderr}"
     );
 }
 

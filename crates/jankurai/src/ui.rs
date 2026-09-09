@@ -1,6 +1,5 @@
 use std::io::{self, IsTerminal, Write};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
 
 #[derive(Clone, Copy)]
 pub enum Style {
@@ -98,28 +97,38 @@ pub fn audit_banner() {
     );
 }
 
-pub fn audit_scorecard(score: i32, raw: i32, findings: usize, passed: bool) {
+pub fn audit_scorecard(
+    score: i32,
+    raw: i32,
+    findings: usize,
+    minimum_score: Option<i32>,
+    verdict: &str,
+) {
     if !progress_enabled()
         && !demo_enabled()
         && std::env::var("JANKURAI_PROGRESS").as_deref() != Ok("always")
     {
         return;
     }
-    let style = if passed { Style::Good } else { Style::Error };
-    let mark = if passed { "PASS" } else { "FAIL" };
+    let style = match verdict {
+        "PASS" => Style::Good,
+        "ADVISORY" => Style::Warn,
+        _ => Style::Error,
+    };
+    let floor = minimum_score.map_or_else(|| "unknown".into(), |value| value.to_string());
     eprintln!("{}", epaint(style, "┌────────────── score ──────────────┐"));
     eprintln!(
         "{}",
         epaint(
             style,
-            format!("│  {score:>3}/100   raw {raw:<3}   {mark:<4}      │")
+            format!("│  {score:>3}/100   raw {raw:<3}   {verdict:<8}  │")
         )
     );
     eprintln!(
         "{}",
         epaint(
             Style::Warn,
-            format!("│  findings {findings:<4}   floor 85          │")
+            format!("│  findings {findings:<4}   floor {floor:<7}     │")
         )
     );
     eprintln!("{}", epaint(style, "└───────────────────────────────────┘"));
@@ -165,7 +174,6 @@ impl CliProgress {
     pub fn tick(&self, message: impl Into<String>) {
         let message = message.into();
         let pos = self.pos.fetch_add(1, Ordering::Relaxed) + 1;
-        maybe_demo_pause();
         if self.forced_lines {
             eprintln!("{}", forced_progress_line(pos, self.len, &message));
             return;
@@ -178,7 +186,6 @@ impl CliProgress {
 
     pub fn finish(&self, message: impl Into<String>) {
         let message = message.into();
-        maybe_demo_pause();
         if self.forced_lines {
             eprintln!("{}", forced_progress_line(self.len, self.len, &message));
             return;
@@ -220,12 +227,6 @@ fn forced_progress_line(pos: u64, len: u64, message: &str) -> String {
 
 fn demo_enabled() -> bool {
     std::env::var("JANKURAI_DEMO").as_deref() == Ok("1")
-}
-
-fn maybe_demo_pause() {
-    if demo_enabled() {
-        std::thread::sleep(Duration::from_millis(220));
-    }
 }
 
 fn progress_enabled() -> bool {

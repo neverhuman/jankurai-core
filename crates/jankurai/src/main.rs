@@ -363,6 +363,9 @@ struct AuditArgs {
     score_history_max_bytes: usize,
     #[arg(long)]
     no_score_history: bool,
+    /// Suppress automatic writes to configured badge/README files.
+    #[arg(long)]
+    no_badge: bool,
     #[arg(long)]
     full: bool,
     #[arg(long, value_name = "SECS")]
@@ -2377,6 +2380,7 @@ fn run_init_bootstrap_commit(args: InitArgs) -> anyhow::Result<()> {
         score_history_max_rows: 500,
         score_history_max_bytes: 1_048_576,
         no_score_history: false,
+        no_badge: false,
         changed_fast: false,
         timings_json: None,
         full: true,
@@ -2538,6 +2542,12 @@ fn run_audit_and_write(args: AuditArgs) -> anyhow::Result<()> {
     if args.json == "-" && args.md == "-" {
         anyhow::bail!("use at most one stdout target; JSON and Markdown may not share stdout");
     }
+    if args
+        .fail_under
+        .is_some_and(|floor| !(0..=100).contains(&floor))
+    {
+        anyhow::bail!("--fail-under must be an integer from 0 through 100");
+    }
     jankurai::ui::audit_banner();
     let progress = jankurai::ui::CliProgress::new("scoring repository", 8);
     progress.tick("resolve changed paths");
@@ -2598,10 +2608,13 @@ fn run_audit_and_write(args: AuditArgs) -> anyhow::Result<()> {
         }
     }
     progress.tick("apply score policy");
-    if let Some(minimum_score) = args.fail_under {
-        if let Some(policy) = report.policy.as_mut() {
-            policy.minimum_score = minimum_score;
-        }
+    {
+        let policy = report
+            .policy
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("audit produced no policy"))?;
+        policy.minimum_score = effective_score_floor(policy.minimum_score, args.fail_under)
+            .map_err(anyhow::Error::msg)?;
     }
     if !args.fail_on.is_empty() {
         if let Some(policy) = report.policy.as_mut() {
@@ -2702,17 +2715,6 @@ fn run_audit_and_write(args: AuditArgs) -> anyhow::Result<()> {
         report.raw_score,
         report.findings.len()
     ));
-    let passed = report
-        .decision
-        .as_ref()
-        .map(|decision| decision.passed)
-        .unwrap_or(false);
-    jankurai::ui::audit_scorecard(
-        report.score,
-        report.raw_score,
-        report.findings.len(),
-        passed,
-    );
     eprintln!(
         "{}",
         jankurai::ui::epaint(
@@ -2729,7 +2731,7 @@ fn run_audit_and_write(args: AuditArgs) -> anyhow::Result<()> {
     // Auto-update badge if agent/badge.toml is present and this is a full
     // non-advisory audit. Advisory required/fast gates must not rewrite
     // committed badge files; `jankurai badge` is the explicit writer.
-    if !changed_fast_effective && mode != AuditMode::Advisory {
+    if !args.no_badge && !changed_fast_effective && mode != AuditMode::Advisory {
         if let Err(e) = badge::run_from_config_after_audit(&args.repo, &args.json, &args.md) {
             eprintln!(
                 "{}",
@@ -2743,11 +2745,35 @@ fn run_audit_and_write(args: AuditArgs) -> anyhow::Result<()> {
     if save_smart_state {
         let _ = jankurai::audit::smart_scan::save_state(&args.repo, &report);
     }
-    if changed_fast_effective {
-        return Ok(());
-    }
-    enforce_audit_decision(&report, mode)?;
-    Ok(())
+    let outcome = if changed_fast_effective {
+        Ok(())
+    } else {
+        enforce_audit_decision(&report, mode)
+    };
+    let verdict = if outcome.is_err() {
+        "FAIL"
+    } else if mode == AuditMode::Advisory {
+        "ADVISORY"
+    } else if report
+        .decision
+        .as_ref()
+        .is_some_and(|decision| decision.passed)
+    {
+        "PASS"
+    } else {
+        "FAIL"
+    };
+    jankurai::ui::audit_scorecard(
+        report.score,
+        report.raw_score,
+        report.findings.len(),
+        report
+            .decision
+            .as_ref()
+            .map(|decision| decision.minimum_score),
+        verdict,
+    );
+    outcome
 }
 
 fn run_adapters_verify(args: AdapterVerifyArgs) -> anyhow::Result<()> {
@@ -2846,6 +2872,13 @@ fn recompute_report_decision(report: &mut jankurai::model::Report) {
     }
 }
 
+fn effective_score_floor(policy: i32, requested: Option<i32>) -> Result<i32, &'static str> {
+    if !(0..=100).contains(&policy) || requested.is_some_and(|floor| !(0..=100).contains(&floor)) {
+        return Err("score floors must be integers from 0 through 100");
+    }
+    Ok(policy.max(requested.unwrap_or(policy)))
+}
+
 fn enforce_audit_decision(report: &jankurai::model::Report, mode: AuditMode) -> anyhow::Result<()> {
     if matches!(mode, AuditMode::Advisory) {
         return Ok(());
@@ -2875,5 +2908,27 @@ fn run_ux_passthrough() -> anyhow::Result<()> {
         Ok(())
     } else {
         anyhow::bail!("jankurai ux exited with {}", status)
+    }
+}
+
+#[cfg(test)]
+mod score_floor_tests {
+    use super::effective_score_floor;
+
+    #[test]
+    fn cli_floor_cannot_lower_repository_policy() {
+        assert_eq!(effective_score_floor(90, Some(85)), Ok(90));
+        assert_eq!(effective_score_floor(85, Some(90)), Ok(90));
+        assert_eq!(effective_score_floor(90, Some(0)), Ok(90));
+        assert_eq!(effective_score_floor(85, None), Ok(85));
+    }
+
+    #[test]
+    fn score_floors_reject_invalid_bounds() {
+        for invalid in [-1, 101] {
+            assert!(effective_score_floor(85, Some(invalid)).is_err());
+            assert!(effective_score_floor(invalid, None).is_err());
+        }
+        assert_eq!(effective_score_floor(0, Some(100)), Ok(100));
     }
 }
