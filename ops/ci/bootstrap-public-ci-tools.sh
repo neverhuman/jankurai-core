@@ -33,4 +33,7 @@ install_release rhysd/actionlint "$ACTIONLINT_VERSION" actionlint "actionlint_${
 install_release anchore/syft "$SYFT_VERSION" syft "syft_${SYFT_VERSION}_linux_amd64.tar.gz"
 install_release anchore/grype "$GRYPE_VERSION" grype "grype_${GRYPE_VERSION}_linux_amd64.tar.gz"
 
+# Populate the locked crate and git dependency cache before offline quality gates.
+cargo fetch --locked
+
 bash scripts/ci-doctor.sh
