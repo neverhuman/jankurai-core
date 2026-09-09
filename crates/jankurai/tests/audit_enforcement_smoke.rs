@@ -110,6 +110,11 @@ fn explicit_empty_fail_on_stays_empty() {
 fn fail_on_policy_controls_hard_findings() {
     let repo = tempdir().unwrap();
     write_base_repo(repo.path());
+    fs::write(
+        repo.path().join("agent/audit-policy.toml"),
+        "minimum_score = 0\nfail_on = [\"critical\"]\n",
+    )
+    .unwrap();
 
     let critical_only = audit(
         repo.path(),
