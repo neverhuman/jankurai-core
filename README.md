@@ -1,7 +1,7 @@
 # jankurai-core
 
 <!-- jankurai-badge:start -->
-[![jankurai audit](agent/jankurai-badge.svg)](agent/jankurai-badge.json)
+[![Jankurai score: 95/100](agent/jankurai-badge.svg)](agent/jankurai-badge.json)
 <!-- jankurai-badge:end -->
 
 Rust package and binary source for the **jankurai** auditor and merge control
