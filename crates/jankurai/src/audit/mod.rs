@@ -412,14 +412,22 @@ fn load_policy(root: &Path) -> Result<PolicySummary> {
     struct AuditPolicyFile {
         #[serde(default = "default_minimum_score")]
         minimum_score: i32,
-        #[serde(default)]
+        #[serde(default = "default_fail_on")]
         fail_on: Vec<String>,
-        #[serde(default)]
+        #[serde(default = "default_advisory_on")]
         advisory_on: Vec<String>,
     }
 
     fn default_minimum_score() -> i32 {
         85
+    }
+
+    fn default_fail_on() -> Vec<String> {
+        vec!["critical".into(), "high".into()]
+    }
+
+    fn default_advisory_on() -> Vec<String> {
+        vec!["medium".into(), "low".into()]
     }
 
     let path = root.join("agent/audit-policy.toml");
@@ -428,8 +436,8 @@ fn load_policy(root: &Path) -> Result<PolicySummary> {
             .map_err(|err| anyhow::anyhow!("invalid audit policy {}: {err}", path.display()))?,
         Err(_) => AuditPolicyFile {
             minimum_score: default_minimum_score(),
-            fail_on: vec!["critical".into(), "high".into()],
-            advisory_on: vec!["medium".into(), "low".into()],
+            fail_on: default_fail_on(),
+            advisory_on: default_advisory_on(),
         },
     };
     validate_policy_severities("fail_on", &parsed.fail_on)?;
