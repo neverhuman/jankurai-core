@@ -7,6 +7,7 @@ cd "${repo_root}"
 profile="${1:-ci}"
 mkdir -p target/jankurai/security
 has_package=false
+lane_exit=0
 
 run_step() {
     local label="$1"
@@ -22,6 +23,9 @@ run_step() {
     local status="ran"
     if [[ ${exit_code} -ne 0 ]]; then
         status="failed"
+        if [[ "${advisory}" == "false" && "${lane_exit}" -eq 0 ]]; then
+            lane_exit="${exit_code}"
+        fi
     fi
     printf 'jankurai-security-step={"label":"%s","tool":"%s","shell_command":"%s","status":"%s","advisory":%s,"exit_code":%d}\n' \
         "${label}" "${tool}" "${shell_command}" "${status}" "${advisory}" "${exit_code}"
@@ -60,13 +64,13 @@ fi
 
 if [[ "${has_package}" == false ]]; then
     printf '[security] no package manifest; dependency inventory not applicable\n'
-    exit 0
+    exit "${lane_exit}"
 fi
 
 printf '[security] SBOM and vulnerability scan\n'
-run_step syft syft 'syft . -o cyclonedx-json=target/jankurai/security/sbom.json' false \
+run_step syft syft 'syft . -o cyclonedx-json=target/jankurai/security/sbom.json' true \
     syft . -o cyclonedx-json=target/jankurai/security/sbom.json
-run_step grype grype 'grype sbom:target/jankurai/security/sbom.json --fail-on high' false \
+run_step grype grype 'grype sbom:target/jankurai/security/sbom.json --fail-on high' true \
     grype sbom:target/jankurai/security/sbom.json --fail-on high
 
 printf '[security] provenance input digest\n'
@@ -78,3 +82,4 @@ if [[ -f package-lock.json ]]; then
     provenance_inputs=(package-lock.json "${provenance_inputs[@]}")
 fi
 sha256sum "${provenance_inputs[@]}" > target/jankurai/security/provenance-inputs.sha256
+exit "${lane_exit}"
