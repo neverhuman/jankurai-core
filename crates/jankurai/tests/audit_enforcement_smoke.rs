@@ -277,3 +277,53 @@ fn isolated_empty_repo_report_includes_ratchet_score_delta() {
             .unwrap();
     assert_eq!(value["decision"]["ratchet"]["score_delta"], 0);
 }
+
+#[test]
+fn advisory_audit_does_not_rewrite_committed_badges() {
+    let repo = tempdir().unwrap();
+    write_base_repo(repo.path());
+    fs::write(
+        repo.path().join("agent/badge.toml"),
+        "enabled = true\n\
+         score = \".jankurai/repo-score.json\"\n\
+         svg = \"agent/jankurai-badge.svg\"\n\
+         json = \"agent/jankurai-badge.json\"\n\
+         readme = \"README.md\"\n\
+         link = \"agent/jankurai-badge.json\"\n\
+         update_readme = true\n\
+         label = \"jankurai\"\n",
+    )
+    .unwrap();
+    let readme =
+        "# fixture\n<!-- jankurai-badge:start -->\ncommitted badge\n<!-- jankurai-badge:end -->\n";
+    fs::write(repo.path().join("README.md"), readme).unwrap();
+    fs::write(
+        repo.path().join("agent/jankurai-badge.svg"),
+        "SENTINEL_SVG\n",
+    )
+    .unwrap();
+    fs::write(
+        repo.path().join("agent/jankurai-badge.json"),
+        "SENTINEL_JSON\n",
+    )
+    .unwrap();
+
+    let output = audit(repo.path(), &["--mode", "advisory", "--fail-under", "0"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        fs::read_to_string(repo.path().join("README.md")).unwrap(),
+        readme
+    );
+    assert_eq!(
+        fs::read_to_string(repo.path().join("agent/jankurai-badge.svg")).unwrap(),
+        "SENTINEL_SVG\n"
+    );
+    assert_eq!(
+        fs::read_to_string(repo.path().join("agent/jankurai-badge.json")).unwrap(),
+        "SENTINEL_JSON\n"
+    );
+}
