@@ -10,9 +10,27 @@ cargo install --locked zizmor --version "$ZIZMOR_VERSION"
 
 install_bin="${CARGO_HOME:-$HOME/.cargo}/bin"
 mkdir -p "$install_bin"
-GOBIN="$install_bin" go install "github.com/gitleaks/gitleaks/v8@v$GITLEAKS_VERSION"
-GOBIN="$install_bin" go install "github.com/rhysd/actionlint/cmd/actionlint@v$ACTIONLINT_VERSION"
-GOBIN="$install_bin" go install "github.com/anchore/syft/cmd/syft@v$SYFT_VERSION"
-GOBIN="$install_bin" go install "github.com/anchore/grype/cmd/grype@v$GRYPE_VERSION"
+archive_root="$(mktemp -d)"
+trap 'rm -rf "$archive_root"' EXIT
+
+# Install a pinned GitHub-release binary after verifying its published checksum.
+# go install is not used: module paths for these tools have moved, and release
+# tarballs are the same artifacts sibling repos already pin.
+install_release() {
+  local repository="$1" version="$2" binary="$3" archive="$4"
+  local checksums="${binary}_${version}_checksums.txt"
+  local base="https://github.com/$repository/releases/download/v$version"
+  curl --proto '=https' --tlsv1.2 -fsSL "$base/$archive" -o "$archive_root/$archive"
+  curl --proto '=https' --tlsv1.2 -fsSL "$base/$checksums" -o "$archive_root/$checksums"
+  (cd "$archive_root" && awk -v name="$archive" '$2 == name { print; count++ } END { if (count != 1) exit 1 }' "$checksums" > selected.sha256 && sha256sum -c selected.sha256)
+  tar -xzf "$archive_root/$archive" -C "$archive_root" "$binary"
+  install -m 0755 "$archive_root/$binary" "$install_bin/$binary"
+  "$install_bin/$binary" --version || "$install_bin/$binary" version
+}
+
+install_release gitleaks/gitleaks "$GITLEAKS_VERSION" gitleaks "gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+install_release rhysd/actionlint "$ACTIONLINT_VERSION" actionlint "actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+install_release anchore/syft "$SYFT_VERSION" syft "syft_${SYFT_VERSION}_linux_amd64.tar.gz"
+install_release anchore/grype "$GRYPE_VERSION" grype "grype_${GRYPE_VERSION}_linux_amd64.tar.gz"
 
 bash scripts/ci-doctor.sh
