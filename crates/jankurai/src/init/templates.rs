@@ -227,6 +227,19 @@ if [[ ! "$hook_floor" =~ ^(0|[1-9][0-9]?|100)$ ]]; then
 fi
 report_work="$(mktemp -d "$report_dir/.pre-commit.XXXXXXXX")"
 trap 'rm -rf -- "$report_work"' EXIT
+
+# Preserve any fresh JSON/Markdown the auditor wrote before the EXIT trap
+# removes the work directory, including failed audits that must replace an
+# older pass report rather than leaving it as the latest artifact.
+promote_hook_report() {
+  if [ -f "$report_work/score.json" ]; then
+    mv -- "$report_work/score.json" "$report_json"
+  fi
+  if [ -f "$report_work/score.md" ]; then
+    mv -- "$report_work/score.md" "$report_md"
+  fi
+}
+
 audit_args=(
   audit .
   --mode "$hook_mode"
@@ -253,6 +266,7 @@ if [ -n "${JANKURAI_SCORE_HISTORY_MAX_BYTES:-}" ]; then
 fi
 
 if ! "$jankurai_cmd" "${audit_args[@]}"; then
+  promote_hook_report || true
   echo "jankurai pre-commit audit failed; set JANKURAI_SKIP_HOOKS=1 to bypass local hooks" >&2
   exit 1
 fi
@@ -277,11 +291,11 @@ type == "object"
   and ((.decision | has("ratchet") | not) or .decision.ratchet == null or
        (.decision.ratchet | type == "object" and .passed == true))
 ' "$report_work/score.json" >/dev/null; then
+  promote_hook_report || true
   echo "jankurai pre-commit report is invalid or failed its score/policy gate" >&2
   exit 1
 fi
-mv -- "$report_work/score.json" "$report_json"
-mv -- "$report_work/score.md" "$report_md"
+promote_hook_report
 
 if [ "${JANKURAI_HOOK_STAGE_ARTIFACTS:-}" = "1" ]; then
   git add -- "$report_json" "$report_md" "$report_history_jsonl" "$report_history_csv" 2>/dev/null || true

@@ -12,7 +12,7 @@ export REPO_ROOT
 export GIT_TERMINAL_PROMPT=0
 
 # Pinned tool versions. Lanes read these so CI and local environments match.
-export RUST_TOOLCHAIN="${RUST_TOOLCHAIN:-stable}"
+export RUST_TOOLCHAIN="${RUST_TOOLCHAIN:-1.97.1}"
 export GITLEAKS_VERSION="${GITLEAKS_VERSION:-8.21.2}"
 export CARGO_AUDIT_VERSION="${CARGO_AUDIT_VERSION:-0.22.1}"
 export CARGO_DENY_VERSION="${CARGO_DENY_VERSION:-0.19.8}"
