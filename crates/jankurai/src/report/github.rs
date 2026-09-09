@@ -12,7 +12,7 @@ fn truncate_content_fingerprint_for_summary(fingerprint: &str) -> String {
         .take(12)
         .collect();
     if hex_prefix.is_empty() {
-        format!("{PREFIX}{}", &rest.chars().take(12).collect::<String>())
+        format!("{PREFIX}{}", rest.chars().take(12).collect::<String>())
     } else {
         format!("{PREFIX}{hex_prefix}")
     }

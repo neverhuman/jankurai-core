@@ -133,7 +133,7 @@ fn direct_file_exclusion_does_not_hide_tracked_rust() {
     fs::create_dir_all(repo.path().join("crates/foo/src")).unwrap();
     fs::write(
         repo.path().join("crates/foo/src/lib.rs"),
-        "pub fn hidden() {\n    let marker = \"legacy\";\n    let _ = marker;\n}\n",
+        "pub fn hidden() {\n    /* TODO: remove legacy compatibility fallback after migration. */\n}\n",
     )
     .unwrap();
     fs::write(
@@ -160,7 +160,7 @@ fn broad_root_exclusion_does_not_hide_tracked_rust() {
     fs::create_dir_all(repo.path().join("crates/foo/src")).unwrap();
     fs::write(
         repo.path().join("crates/foo/src/lib.rs"),
-        "pub fn hidden() {\n    let marker = \"legacy\";\n    let _ = marker;\n}\n",
+        "pub fn hidden() {\n    /* TODO: remove legacy compatibility fallback after migration. */\n}\n",
     )
     .unwrap();
     fs::write(

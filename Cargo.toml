@@ -3,3 +3,8 @@ members = [
   "crates/jankurai",
 ]
 resolver = "2"
+
+# Sibling crates pin kernel via tag split.1. Redirect every consumer to the
+# GitHub-primary 1.7.0 kernel so Report exists once in the graph.
+[patch."https://github.com/neverhuman/jankurai-tools-kernel.git"]
+jankurai-audit-kernel = { git = "https://www.github.com/neverhuman/jankurai-tools-kernel.git", rev = "ecbcbbc6a3bc76e755a2015190d124758029f4ba" }

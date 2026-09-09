@@ -72,3 +72,70 @@ fn badge_command_emits_readme_schema_valid_json() {
     assert!(badge_svg.contains(">100/100<"));
     assert!(!badge_svg.contains("100/100 pass"));
 }
+
+#[test]
+fn badge_command_accepts_clean_advisory_pass() {
+    let repo = tempdir().unwrap();
+    fs::create_dir_all(repo.path().join("agent")).unwrap();
+    fs::write(
+        repo.path().join("AGENTS.md"),
+        "Read agent/JANKURAI_STANDARD.md first.\n",
+    )
+    .unwrap();
+    fs::write(repo.path().join("README.md"), "# fixture\n").unwrap();
+    fs::create_dir_all(repo.path().join(".jankurai")).unwrap();
+    fs::write(
+        repo.path().join("Justfile"),
+        "fast:\n    echo ok\ncheck:\n    echo ok\n",
+    )
+    .unwrap();
+    fs::write(
+        repo.path().join("agent/JANKURAI_STANDARD.md"),
+        "Standard version: `0.9.0`\n",
+    )
+    .unwrap();
+    fs::create_dir_all(repo.path().join("docs")).unwrap();
+    fs::write(
+        repo.path().join("docs/agent-native-standard.md"),
+        "Standard version: `0.9.0`\n",
+    )
+    .unwrap();
+    let report = run_audit(repo.path(), &[]).unwrap();
+    let mut report_value = serde_json::to_value(&report).unwrap();
+    report_value["score"] = serde_json::json!(88);
+    report_value["raw_score"] = serde_json::json!(88);
+    report_value["dirty_worktree"] = serde_json::json!(false);
+    report_value["findings"] = serde_json::json!([]);
+    report_value["caps_applied"] = serde_json::json!([]);
+    report_value["decision"]["status"] = serde_json::json!("advisory");
+    report_value["decision"]["passed"] = serde_json::json!(true);
+    report_value["decision"]["hard_findings"] = serde_json::json!(0);
+    report_value["decision"]["soft_findings"] = serde_json::json!(0);
+    fs::write(
+        repo.path().join(".jankurai/repo-score.json"),
+        serde_json::to_string_pretty(&report_value).unwrap(),
+    )
+    .unwrap();
+
+    let generate = Command::new(binary_path())
+        .current_dir(repo.path())
+        .args(["badge", ".", "--no-readme"])
+        .output()
+        .unwrap();
+    assert!(
+        generate.status.success(),
+        "generate: {}",
+        String::from_utf8_lossy(&generate.stderr)
+    );
+
+    let check = Command::new(binary_path())
+        .current_dir(repo.path())
+        .args(["badge", ".", "--check", "--no-readme"])
+        .output()
+        .unwrap();
+    assert!(
+        check.status.success(),
+        "check: {}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+}

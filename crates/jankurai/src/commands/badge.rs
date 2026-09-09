@@ -345,17 +345,21 @@ fn load_score_input(repo: &Path, score_path: &str) -> Result<ScoreInput> {
         let min_ok = minimum_score.map(|m| score >= m).unwrap_or(true);
         min_ok && hard_findings == 0 && status != "fail"
     });
-    if value
+    let dirty = value
         .get("dirty_worktree")
         .and_then(Value::as_bool)
-        .unwrap_or(true)
-    {
+        .unwrap_or(true);
+    if dirty {
         bail!(
             "{} cannot source a public badge from a dirty report",
             abs.display()
         );
     }
-    if status == "advisory" || !passed {
+    // Advisory reports may still source a badge when the reviewed score already
+    // met the floor with no hard findings. `--check` uses the same rule so CI
+    // can verify committed SVGs against those baselines. Failed reports cannot
+    // decorate a public README.
+    if !passed || status == "fail" {
         bail!(
             "{} cannot source a public badge from a {} report",
             abs.display(),

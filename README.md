@@ -1,6 +1,8 @@
 # jankurai-core
 
+<!-- jankurai-badge:start -->
 [![jankurai audit](agent/jankurai-badge.svg)](agent/jankurai-badge.json)
+<!-- jankurai-badge:end -->
 
 Rust package and binary source for the **jankurai** auditor and merge control
 plane. This repository is one member of the Jankurai split family; read
