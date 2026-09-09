@@ -559,12 +559,58 @@ edition = "2021"
         "{first_message}"
     );
 
-    fs::write(
-        dir.path().join("docs/architecture/README.md"),
-        "# Architecture\n\nCommit hook proof.\n",
+    let first_report = fs::read_to_string(
+        dir.path()
+            .join("target/jankurai/hooks/pre-commit-score.json"),
     )
     .unwrap();
-    git(dir.path(), &["add", "docs/architecture/README.md"]);
+    let first_score = first_message
+        .lines()
+        .find(|line| line.starts_with("Jankurai-Score:"))
+        .expect("bootstrap trailer");
+    let report: serde_json::Value = serde_json::from_str(&first_report).unwrap();
+    assert_eq!(
+        format!("Jankurai-Score: {}", report["score"]),
+        first_score.trim(),
+        "bootstrap trailers must come from the compiled auditor report"
+    );
+    assert!(dir
+        .path()
+        .join("target/jankurai/hooks/pre-commit-score.md")
+        .is_file());
+    let history = fs::read_to_string(
+        dir.path()
+            .join("target/jankurai/hooks/pre-commit-score-history.jsonl"),
+    )
+    .unwrap();
+    assert!(
+        history
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .count()
+            >= 1,
+        "{history}"
+    );
+    assert!(
+        history.contains(&report["score"].to_string()),
+        "history must record the compiled auditor score, not a fabricated row\n{history}"
+    );
+}
+
+#[test]
+fn managed_pre_commit_wiring_with_controlled_auditor() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    fs::write(dir.path().join("README.md"), "fixture\n").unwrap();
+    git(dir.path(), &["add", "README.md"]);
+    git(dir.path(), &["commit", "-m", "seed"]);
+    assert_command_success(
+        Command::new(binary_path())
+            .arg("hooks")
+            .arg("install")
+            .arg(dir.path())
+            .arg("--yes"),
+    );
     let stub = dir.path().join("passing-auditor");
     fs::write(
         &stub,
@@ -598,34 +644,15 @@ if [ -n "$history" ]; then printf '%s\n' '{"score":90}' >> "$history"; fi
     let mut env = fs::read_to_string(&env_path).unwrap();
     env.push_str(&format!("JANKURAI_BIN='{}'\n", stub.display()));
     fs::write(&env_path, env).unwrap();
-    git(dir.path(), &["commit", "-m", "Touch architecture docs"]);
-    let second_message = git_stdout(dir.path(), &["log", "-1", "--format=%B"]);
-    assert!(
-        second_message.contains("Jankurai-Score:"),
-        "{second_message}"
+    fs::write(dir.path().join("NOTE.md"), "hook wiring\n").unwrap();
+    git(dir.path(), &["add", "NOTE.md"]);
+    git(
+        dir.path(),
+        &["commit", "-m", "Touch with controlled auditor"],
     );
+    let message = git_stdout(dir.path(), &["log", "-1", "--format=%B"]);
+    assert!(message.contains("Jankurai-Score:"), "{message}");
     assert!(dir.path().join(".git/jankurai/last-score.env").is_file());
-    assert!(dir
-        .path()
-        .join("target/jankurai/hooks/pre-commit-score.json")
-        .is_file());
-    assert!(dir
-        .path()
-        .join("target/jankurai/hooks/pre-commit-score.md")
-        .is_file());
-    let history = fs::read_to_string(
-        dir.path()
-            .join("target/jankurai/hooks/pre-commit-score-history.jsonl"),
-    )
-    .unwrap();
-    assert!(
-        history
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-            .count()
-            >= 1,
-        "{history}"
-    );
 }
 
 #[test]
