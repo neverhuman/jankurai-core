@@ -79,7 +79,11 @@ fn advisory_mode_keeps_failed_decision_nonblocking() {
 fn omitted_fail_on_defaults_to_critical_and_high() {
     let repo = tempdir().unwrap();
     write_base_repo(repo.path());
-    fs::write(repo.path().join("agent/audit-policy.toml"), "minimum_score = 0\n").unwrap();
+    fs::write(
+        repo.path().join("agent/audit-policy.toml"),
+        "minimum_score = 0\n",
+    )
+    .unwrap();
 
     let report = jankurai::audit::run_audit(repo.path(), &[]).unwrap();
     assert_eq!(
