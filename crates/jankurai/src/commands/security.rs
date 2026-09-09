@@ -55,7 +55,7 @@ fn default_fail_lane_on() -> String {
     "high".into()
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq, Eq)]
 struct ParsedSecurityStep {
     label: String,
     shell_command: String,
@@ -201,7 +201,11 @@ pub fn run(args: SecurityRunArgs) -> Result<()> {
         .as_secs()
         .to_string();
 
-    let parsed_commands = parse_script_steps(&log_text);
+    let mut parsed_commands = parse_script_steps(&log_text);
+    if std::str::from_utf8(&output.stdout).is_err() || std::str::from_utf8(&output.stderr).is_err()
+    {
+        parsed_commands.push(invalid_script_step(0, "non-UTF-8 wrapper output"));
+    }
     let mut commands = if !parsed_commands.is_empty() {
         parsed_commands
             .into_iter()
@@ -356,7 +360,7 @@ fn enrich_step(step: ParsedSecurityStep, policy: &SecurityProfilePolicy) -> Secu
                     && !step.advisory)
         })
         .unwrap_or(!step.advisory);
-    let blocking = required_by_policy && step.status != "ran";
+    let blocking = required_by_policy && (step.status != "ran" || step.exit_code != Some(0));
     SecurityLaneStep {
         label: step.label,
         shell_command: step.shell_command,
@@ -379,6 +383,7 @@ fn append_missing_required_steps(
 ) {
     let seen = commands
         .iter()
+        .filter(|command| command.status == "ran" && command.exit_code == Some(0))
         .filter_map(|command| command.tool.as_deref().map(canonical_tool_id))
         .collect::<BTreeSet<_>>();
     for tool in &policy.required_tools {
@@ -441,24 +446,68 @@ fn canonical_tool_id(tool: &str) -> String {
     }
 }
 
+fn invalid_script_step(line: usize, reason: &str) -> ParsedSecurityStep {
+    // A parse error is a producer failure, never an advisory scanner outcome.
+    // Keep it in the report even if another record satisfies a required tool.
+    ParsedSecurityStep {
+        label: format!("invalid-security-record at line {line}: {reason}"),
+        shell_command: "security lane evidence parser".into(),
+        tool: None,
+        status: "failed".into(),
+        advisory: false,
+        exit_code: None,
+    }
+}
+
 fn parse_script_steps(log: &str) -> Vec<ParsedSecurityStep> {
-    let mut steps = Vec::new();
-    for line in log.lines() {
-        let rest = match line.trim_start().strip_prefix("jankurai-security-step=") {
-            Some(r) => r,
-            None => continue,
-        };
-        let Ok(p) = serde_json::from_str::<ParsedSecurityStep>(rest) else {
+    let mut steps: Vec<ParsedSecurityStep> = Vec::new();
+    let mut labels: BTreeMap<String, usize> = BTreeMap::new();
+    for (index, line) in log.lines().enumerate() {
+        let Some(marker) = line.trim_start().strip_prefix("jankurai-security-step") else {
             continue;
         };
-        steps.push(ParsedSecurityStep {
-            label: p.label,
-            shell_command: p.shell_command,
-            tool: p.tool,
-            status: p.status,
-            exit_code: p.exit_code,
-            advisory: p.advisory,
-        });
+        let line_number = index + 1;
+        let Some(rest) = marker.strip_prefix('=') else {
+            steps.push(invalid_script_step(line_number, "malformed record prefix"));
+            continue;
+        };
+        let Ok(mut step) = serde_json::from_str::<ParsedSecurityStep>(rest) else {
+            steps.push(invalid_script_step(
+                line_number,
+                "malformed JSON or invalid fields",
+            ));
+            continue;
+        };
+        step.tool = step.tool.as_deref().map(canonical_tool_id);
+        let consistent_outcome = match step.status.as_str() {
+            "ran" => step.exit_code == Some(0),
+            "failed" => step.exit_code.is_some_and(|code| code != 0),
+            "skipped" => step.exit_code.is_none(),
+            _ => false,
+        };
+        if step.label.trim().is_empty()
+            || step.shell_command.trim().is_empty()
+            || step.tool.as_deref().is_some_and(str::is_empty)
+            || !consistent_outcome
+        {
+            steps.push(invalid_script_step(
+                line_number,
+                "contradictory or incomplete step",
+            ));
+            continue;
+        }
+        if let Some(previous) = labels.get(&step.label) {
+            if steps[*previous] != step {
+                steps.push(invalid_script_step(
+                    line_number,
+                    "conflicting duplicate step label",
+                ));
+                continue;
+            }
+        } else {
+            labels.insert(step.label.clone(), steps.len());
+        }
+        steps.push(step);
     }
     steps
 }
@@ -482,6 +531,92 @@ jankurai-security-step={"label":"syft","shell_command":"syft .","status":"skippe
         assert!(!steps[0].advisory);
         assert_eq!(steps[1].status, "skipped");
         assert!(steps[1].advisory);
+    }
+
+    fn fixture_step(status: &str, exit_code: Option<i32>, advisory: bool) -> ParsedSecurityStep {
+        ParsedSecurityStep {
+            label: "fixture-scan".into(),
+            shell_command: "fixture-scan".into(),
+            tool: Some("fixture-scan".into()),
+            status: status.into(),
+            advisory,
+            exit_code,
+        }
+    }
+
+    #[test]
+    fn required_steps_need_explicit_successful_outcomes() {
+        let policy = SecurityProfilePolicy {
+            required_tools: vec!["fixture-scan".into()],
+            ..Default::default()
+        };
+        for (status, exit_code) in [("ran", Some(42)), ("ran", None), ("failed", Some(42))] {
+            let step = enrich_step(fixture_step(status, exit_code, true), &policy);
+            assert!(step.required_by_policy);
+            assert!(step.blocking, "{status} {exit_code:?} must block");
+        }
+        let step = enrich_step(fixture_step("ran", Some(0), false), &policy);
+        assert!(!step.blocking);
+    }
+
+    #[test]
+    fn one_of_groups_require_a_successful_member() {
+        let policy = SecurityProfilePolicy {
+            advisory_tools: vec!["fixture-scan".into()],
+            require_one_of: vec![vec!["fixture-scan".into(), "fixture-other".into()]],
+            ..Default::default()
+        };
+        for (status, exit_code) in [("failed", Some(42)), ("ran", Some(42)), ("ran", None)] {
+            let mut commands = vec![enrich_step(fixture_step(status, exit_code, true), &policy)];
+            assert!(
+                !commands[0].blocking,
+                "standalone advisory outcome remains nonblocking"
+            );
+            append_missing_required_steps(&mut commands, &policy);
+            assert!(commands
+                .iter()
+                .any(|step| step.required_by_policy && step.blocking));
+        }
+    }
+
+    #[test]
+    fn successful_advisory_member_can_satisfy_one_of_group() {
+        let policy = SecurityProfilePolicy {
+            advisory_tools: vec!["fixture-scan".into()],
+            require_one_of: vec![vec!["fixture-scan".into(), "fixture-other".into()]],
+            ..Default::default()
+        };
+        let mut commands = vec![enrich_step(fixture_step("ran", Some(0), true), &policy)];
+        append_missing_required_steps(&mut commands, &policy);
+        assert_eq!(commands.len(), 1);
+        assert!(!commands[0].blocking);
+    }
+
+    #[test]
+    fn explicit_standalone_advisory_failure_stays_nonblocking() {
+        let policy = SecurityProfilePolicy {
+            advisory_tools: vec!["fixture-scan".into()],
+            ..Default::default()
+        };
+        let mut commands = vec![enrich_step(fixture_step("failed", Some(42), true), &policy)];
+        append_missing_required_steps(&mut commands, &policy);
+        assert_eq!(commands.len(), 1);
+        assert!(!commands[0].blocking);
+    }
+
+    #[test]
+    fn successful_later_record_does_not_clear_required_failure() {
+        let policy = SecurityProfilePolicy {
+            required_tools: vec!["fixture-scan".into()],
+            ..Default::default()
+        };
+        let mut commands = vec![
+            enrich_step(fixture_step("ran", Some(42), false), &policy),
+            enrich_step(fixture_step("ran", Some(0), false), &policy),
+        ];
+        append_missing_required_steps(&mut commands, &policy);
+        assert!(commands[0].blocking);
+        assert!(!commands[1].blocking);
     }
 }
 
@@ -523,3 +658,7 @@ fn display_rel(repo: &Path, path: &Path) -> String {
         .to_string_lossy()
         .replace('\\', "/")
 }
+
+#[cfg(test)]
+#[path = "security_record_tests.rs"]
+mod record_tests;

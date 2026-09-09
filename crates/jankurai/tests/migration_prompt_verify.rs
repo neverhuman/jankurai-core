@@ -289,3 +289,110 @@ fn prompt_verifier_marks_multiple_llm_call_sites_as_review() {
     assert_eq!(report["decision"], "review");
     assert_eq!(report["claims_review"], 1);
 }
+
+fn write_inventory_claim_sources(directory: &std::path::Path) {
+    fs::create_dir_all(directory).unwrap();
+    fs::write(directory.join("shared.rs"), "pub fn build_client() {}\n").unwrap();
+    fs::write(
+        directory.join("runner.py"),
+        "import openai\nclass Model(BaseRunner):\n    pass\n\ndef run():\n    return openai.responses.create(model=\"x\", input=\"hi\")\n",
+    )
+    .unwrap();
+}
+
+fn assert_inventory_claim_decision(repo: &PathBuf, expected: &str) {
+    let (output, _dir, json_path, _) = run_prompt_verify(repo, "prompt.md", true);
+    assert_eq!(
+        output.status.success(),
+        expected != "fail",
+        "{} stderr: {}",
+        repo.display(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(json_path).unwrap()).unwrap();
+    assert_eq!(report["decision"], expected, "{}", repo.display());
+    assert_eq!(report["claims_total"], 3, "{}", repo.display());
+    let (verified, invalid, review) = match expected {
+        "pass" => (3, 0, 0),
+        "review" => (2, 0, 1),
+        "fail" => (0, 3, 0),
+        other => panic!("unexpected test decision: {other}"),
+    };
+    assert_eq!(report["claims_verified"], verified, "{}", repo.display());
+    assert_eq!(report["claims_invalid"], invalid, "{}", repo.display());
+    assert_eq!(report["claims_review"], review, "{}", repo.display());
+}
+
+#[test]
+fn prompt_verifier_is_invariant_to_excluded_names_above_repo_root() {
+    for name in [
+        "ordinary",
+        ".git",
+        "target",
+        "node_modules",
+        "dist",
+        "build",
+        "generated",
+        "vendor",
+    ] {
+        for root_has_name in [false, true] {
+            let parent = tempdir().unwrap();
+            let named = parent.path().join(name);
+            let repo = if root_has_name {
+                named
+            } else {
+                named.join("project")
+            };
+            write_inventory_claim_sources(&repo.join("src"));
+            fs::write(
+                repo.join("prompt.md"),
+                "- shared::build_client\n- class Model(BaseRunner)\n- LLM call\n",
+            )
+            .unwrap();
+            assert_inventory_claim_decision(&repo, "pass");
+
+            fs::create_dir_all(repo.join("src/nested")).unwrap();
+            fs::write(
+                repo.join("src/nested/shared.rs"),
+                "pub fn build_client() {}\n",
+            )
+            .unwrap();
+            assert_inventory_claim_decision(&repo, "review");
+        }
+    }
+}
+
+#[test]
+fn prompt_verifier_still_excludes_named_directories_below_repo_root() {
+    for name in [
+        ".git",
+        "target",
+        "node_modules",
+        "dist",
+        "build",
+        "generated",
+        "vendor",
+    ] {
+        for nested in [false, true] {
+            let parent = tempdir().unwrap();
+            let repo = parent.path().join("project");
+            let excluded = if nested {
+                repo.join("src").join(name)
+            } else {
+                repo.join(name)
+            };
+            write_inventory_claim_sources(&excluded);
+            fs::write(
+                repo.join("prompt.md"),
+                "- shared::build_client\n- class Model(BaseRunner)\n- LLM call\n",
+            )
+            .unwrap();
+            assert_inventory_claim_decision(&repo, "fail");
+
+            // Excluded declarations must not turn genuine source into ambiguity.
+            write_inventory_claim_sources(&repo.join("src"));
+            assert_inventory_claim_decision(&repo, "pass");
+        }
+    }
+}

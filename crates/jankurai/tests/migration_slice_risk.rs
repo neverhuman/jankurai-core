@@ -308,3 +308,90 @@ fn plan_json(slice_id: &str, allowed_paths: &str, notes: &str) -> String {
 }}"#
     )
 }
+
+fn copy_slice_risk_fixture(repo: &std::path::Path) {
+    for path in [
+        "plan.json",
+        "src/bridge.rs",
+        "docs/notes.md",
+        "python/model.py",
+        "python/config.py",
+    ] {
+        let destination = repo.join(path);
+        fs::create_dir_all(destination.parent().unwrap()).unwrap();
+        fs::copy(fixture("repo").join(path), destination).unwrap();
+    }
+}
+
+#[test]
+fn slice_risk_ignores_excluded_names_only_below_repo_root() {
+    for name in [
+        "ordinary",
+        ".git",
+        "target",
+        "node_modules",
+        "dist",
+        "build",
+        "generated",
+        "vendor",
+    ] {
+        let container = tempdir().unwrap();
+        for repo in [
+            container.path().join(name).join("repo"),
+            container.path().join("named-root").join(name),
+        ] {
+            copy_slice_risk_fixture(&repo);
+            for (slice, decision) in [("model-port", "block"), ("docs-cleanup", "pass")] {
+                let (output, _dir, json_path, _) = run_slice_risk(&repo, slice, false);
+                assert!(
+                    output.status.success(),
+                    "{}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                let report: serde_json::Value =
+                    serde_json::from_str(&fs::read_to_string(json_path).unwrap()).unwrap();
+                validation::validate_value(&repo, ArtifactSchema::MigrationSliceRisk, &report)
+                    .unwrap();
+                assert_eq!(report["decision"], decision, "{} {slice}", repo.display());
+            }
+        }
+    }
+}
+
+#[test]
+fn slice_risk_keeps_top_level_and_nested_exclusions_below_repo_root() {
+    let container = tempdir().unwrap();
+    let repo = container.path().join("target").join("repo");
+    fs::create_dir_all(repo.join("src")).unwrap();
+    fs::write(repo.join("src/lib.rs"), "pub fn clean() {}\n").unwrap();
+    fs::write(
+        repo.join("plan.json"),
+        plan_json("whole", "[]", "\"notes\""),
+    )
+    .unwrap();
+    for name in [
+        ".git",
+        "target",
+        "node_modules",
+        "dist",
+        "build",
+        "generated",
+        "vendor",
+    ] {
+        for prefix in [name.to_string(), format!("src/{name}")] {
+            let path = repo.join(prefix).join("model.py");
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::copy(fixture("repo/python/model.py"), path).unwrap();
+        }
+    }
+    let (output, _dir, json_path, _) = run_slice_risk(&repo, "whole", false);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(json_path).unwrap()).unwrap();
+    assert_eq!(report["decision"], "pass");
+    assert_eq!(report["signals_total"], 0);
+}

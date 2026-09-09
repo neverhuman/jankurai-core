@@ -329,3 +329,97 @@ fn exception_expire_strict_passes_when_only_current_exceptions() {
         serde_json::from_str(&fs::read_to_string(&out_path).unwrap()).unwrap();
     assert_eq!(report["status"], "complete");
 }
+
+fn assert_discovered_expired_exceptions(repo: &Path) {
+    let out = repo.join("target/jankurai/exception-discovery.json");
+    let output = Command::new(binary_path())
+        .args(["exceptions", "expire"])
+        .arg(repo)
+        .args(["--strict", "--out"])
+        .arg(&out)
+        .output()
+        .unwrap();
+    assert!(!output.status.success(), "{}", repo.display());
+    let report: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(out).unwrap()).unwrap();
+    validation::validate_value(repo, ArtifactSchema::ExceptionExpiryReport, &report).unwrap();
+    assert_eq!(report["status"], "blocked");
+    assert_eq!(report["expired_count"], 1);
+    assert_eq!(report["invalid_count"], 1);
+    assert_eq!(report["total_exceptions"], 3);
+}
+
+fn assert_discovered_dependency_candidates(repo: &Path) {
+    let (report, _) = run_command(
+        repo,
+        "optimize",
+        &["--mode", "dependency"],
+        "target/jankurai/discovery-optimization.json",
+    );
+    validation::validate_value(repo, ArtifactSchema::OptimizationReport, &report).unwrap();
+    let candidates = report["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|finding| finding["kind"] == "dependency")
+        .count();
+    assert_eq!(candidates, 2, "{}", repo.display());
+}
+
+#[test]
+fn optimization_and_exceptions_ignore_excluded_names_only_below_scan_root() {
+    for name in [
+        "ordinary",
+        "target",
+        "reference",
+        "paper",
+        "node_modules",
+        ".git",
+    ] {
+        let container = tempdir().unwrap();
+        for repo in [
+            container.path().join(name).join("repo"),
+            container.path().join("named-root").join(name),
+        ] {
+            fs::create_dir_all(&repo).unwrap();
+            seed_optimize_repo(&repo);
+            seed_exception_repo(&repo);
+            assert_discovered_dependency_candidates(&repo);
+            assert_discovered_expired_exceptions(&repo);
+        }
+    }
+}
+
+#[test]
+fn optimization_and_exceptions_keep_nested_exclusions_below_scan_root() {
+    let container = tempdir().unwrap();
+    let repo = container.path().join("target").join("repo");
+    fs::create_dir_all(&repo).unwrap();
+    seed_optimize_repo(&repo);
+    seed_exception_repo(&repo);
+    for name in ["target", "reference", "paper", "node_modules", ".git"] {
+        for prefix in [name.to_string(), format!("src/{name}")] {
+            let manifest = repo.join(prefix).join("Cargo.toml");
+            fs::create_dir_all(manifest.parent().unwrap()).unwrap();
+            fs::write(
+                manifest,
+                "this excluded manifest is intentionally invalid TOML",
+            )
+            .unwrap();
+        }
+        for prefix in [name.to_string(), format!("nested/{name}")] {
+            let exception = repo
+                .join("docs/exceptions")
+                .join(prefix)
+                .join("0004-excluded.md");
+            fs::create_dir_all(exception.parent().unwrap()).unwrap();
+            fs::write(
+                exception,
+                "this excluded exception is intentionally invalid",
+            )
+            .unwrap();
+        }
+    }
+    assert_discovered_dependency_candidates(&repo);
+    assert_discovered_expired_exceptions(&repo);
+}

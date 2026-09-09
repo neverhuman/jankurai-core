@@ -466,7 +466,10 @@ fn walk_source_files(root: &Path) -> Result<Vec<PathBuf>> {
     for entry in WalkBuilder::new(root).hidden(true).build() {
         let entry = entry?;
         let path = entry.into_path();
-        if should_skip_path(&path) {
+        let relative = path
+            .strip_prefix(root)
+            .with_context(|| format!("discovered path is outside scan root: {}", path.display()))?;
+        if should_skip_path(relative) {
             continue;
         }
         if path.is_file() {

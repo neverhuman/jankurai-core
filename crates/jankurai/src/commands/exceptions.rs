@@ -1,7 +1,7 @@
 use crate::commands::release_data::load_release_data;
 use crate::commands::repair::now_string;
 use crate::validation::{self, ArtifactSchema};
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use chrono::{NaiveDate, Utc};
 use ignore::WalkBuilder;
 use serde::Deserialize;
@@ -275,7 +275,10 @@ fn collect_exception_files(root: &Path) -> Result<Vec<PathBuf>> {
     for entry in WalkBuilder::new(root).hidden(true).build() {
         let entry = entry?;
         let path = entry.into_path();
-        if should_skip_path(&path) {
+        let relative = path
+            .strip_prefix(root)
+            .with_context(|| format!("discovered path is outside scan root: {}", path.display()))?;
+        if should_skip_path(relative) {
             continue;
         }
         if is_exception_doc(&path) && path.is_file() {
