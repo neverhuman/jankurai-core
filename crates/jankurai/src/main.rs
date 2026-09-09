@@ -2714,8 +2714,10 @@ fn run_audit_and_write(args: AuditArgs) -> anyhow::Result<()> {
             )
         )
     );
-    // Auto-update badge if agent/badge.toml is present and this is a full audit.
-    if !changed_fast_effective {
+    // Auto-update badge if agent/badge.toml is present and this is a full
+    // non-advisory audit. Advisory required/fast gates must not rewrite
+    // committed badge files; `jankurai badge` is the explicit writer.
+    if !changed_fast_effective && mode != AuditMode::Advisory {
         if let Err(e) = badge::run_from_config_after_audit(&args.repo, &args.json, &args.md) {
             eprintln!(
                 "{}",
