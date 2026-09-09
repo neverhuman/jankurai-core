@@ -33,6 +33,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@b3b07ba8b418998c39fb20f53e8b695cdcc8de1b # stable
         with:
+          toolchain: stable
           components: rustfmt, clippy
       - name: Install nextest
         uses: taiki-e/install-action@9ca1734d8940023f074414ee621fd530c4ce10f2 # v2.62.45
@@ -64,3 +65,38 @@ jobs:
             target/jankurai/vibe-coverage.md
             target/jankurai/coverage/coverage-audit.json
             target/jankurai/coverage/coverage-audit.md
+  required:
+    name: jankurai-core/required
+    needs: quality
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: bash ops/ci/aggregate.sh
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+  publish-ci-tag:
+    needs: required
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: bash ops/ci/publish-ci-tag.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
