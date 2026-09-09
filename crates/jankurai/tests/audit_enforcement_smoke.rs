@@ -110,6 +110,11 @@ fn explicit_empty_fail_on_stays_empty() {
 fn fail_on_policy_controls_hard_findings() {
     let repo = tempdir().unwrap();
     write_base_repo(repo.path());
+    fs::write(
+        repo.path().join("agent/audit-policy.toml"),
+        "minimum_score = 0\nfail_on = [\"critical\"]\n",
+    )
+    .unwrap();
 
     let critical_only = audit(
         repo.path(),
@@ -125,7 +130,12 @@ fn fail_on_policy_controls_hard_findings() {
     assert!(critical_only.status.success());
 
     let medium_repo = tempdir().unwrap();
-    fs::write(medium_repo.path().join("README.md"), "# fixture\n").unwrap();
+    write_base_repo(medium_repo.path());
+    fs::write(
+        medium_repo.path().join("agent/audit-policy.toml"),
+        "minimum_score = 0\nfail_on = [\"medium\"]\n",
+    )
+    .unwrap();
     let medium = audit(
         medium_repo.path(),
         &[
@@ -138,6 +148,16 @@ fn fail_on_policy_controls_hard_findings() {
         ],
     );
     assert!(!medium.status.success());
+    let report =
+        fs::read_to_string(medium_repo.path().join("target/jankurai/repo-score.json")).unwrap();
+    assert!(
+        report.contains("\"hard_findings\"") && !report.contains("\"hard_findings\": 0"),
+        "{report}"
+    );
+    assert!(
+        report.contains("\"passed\": false") || report.contains("\"status\": \"fail\""),
+        "{report}"
+    );
 }
 
 #[test]

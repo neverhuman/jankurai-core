@@ -23,6 +23,9 @@ pub fn install(args: CiInstallArgs) -> Result<()> {
             args.mode
         );
     }
+    if !(0..=100).contains(&args.min_score) {
+        bail!("--min-score must be an integer from 0 through 100");
+    }
     if args.mode == "ratchet" && args.baseline.is_none() {
         bail!("ratchet CI requires --baseline PATH; use agent/baselines/main.repo-score.json after an accepted baseline exists");
     }
@@ -72,17 +75,29 @@ pub fn install(args: CiInstallArgs) -> Result<()> {
     Ok(())
 }
 
-fn workflow(mode: &str, _min_score: i32, baseline: Option<&str>) -> String {
-    let audit_mode = if mode == "ratchet" {
-        "ratchet"
-    } else {
-        "advisory"
+fn workflow(mode: &str, min_score: i32, baseline: Option<&str>) -> String {
+    let audit_mode = match mode {
+        "ratchet" => "ratchet",
+        "observe" => "advisory",
+        _ => "standard",
     };
     let baseline = baseline.unwrap_or("agent/baselines/main.repo-score.json");
     let baseline_arg = if mode == "ratchet" {
         " --baseline target/jankurai/accepted-baseline.json"
     } else {
         ""
+    };
+    let floor_arg = if mode == "observe" {
+        String::new()
+    } else {
+        format!(" --fail-under {min_score}")
+    };
+    let floor_check = if mode == "observe" {
+        String::new()
+    } else {
+        format!(
+            "\n      - name: Enforce score floor\n        run: jq -e --argjson floor {min_score} 'type == \"object\"   and (.score | type == \"number\" and . == floor and . >= 0 and . <= 100)   and (.raw_score | type == \"number\" and . == floor and . >= 0 and . <= 100)   and (.findings | type == \"array\")   and (.caps_applied | type == \"array\" and all(.[]; type == \"string\"))   and (.decision | type == \"object\")   and (.decision.status == \"pass\" and .decision.passed == true)   and (.decision.minimum_score | type == \"number\" and . == floor and . >= 0 and . <= 100)   and (.decision.hard_findings | type == \"number\" and . == floor and . == 0)   and (.decision.soft_findings | type == \"number\" and . == floor and . >= 0)   and ((has(\"policy\") | not) or        ((.policy | type == \"object\") and         (.policy.minimum_score | type == \"number\" and . == floor and . >= 0 and . <= 100) and         .policy.minimum_score == .decision.minimum_score))   and (.score >= $floor and .score >= .decision.minimum_score)   and ((.decision | has(\"ratchet\") | not) or .decision.ratchet == null or        (.decision.ratchet | type == \"object\" and .passed == true))' target/jankurai/repo-score.json >/dev/null"
+        )
     };
     format!(
         r#"name: jankurai
@@ -139,7 +154,9 @@ jobs:
       - name: UX QA smoke
         run: jankurai ux audit --config agent/ux-qa.toml --out target/jankurai/ux-qa.json
       - name: jankurai audit
-        run: jankurai audit . --mode {audit_mode}{baseline_arg} --json target/jankurai/repo-score.json --md target/jankurai/repo-score.md --sarif target/jankurai/jankurai.sarif --github-step-summary target/jankurai/summary.md --repair-queue-jsonl target/jankurai/repair-queue.jsonl
+        run: |
+          rm -f -- target/jankurai/repo-score.json
+          jankurai audit . --full --no-badge --mode {audit_mode}{baseline_arg}{floor_arg} --json target/jankurai/repo-score.json --md target/jankurai/repo-score.md --sarif target/jankurai/jankurai.sarif --github-step-summary target/jankurai/summary.md --repair-queue-jsonl target/jankurai/repair-queue.jsonl{floor_check}
       - name: Upload SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@53e96ec3b35fce51c141c0d6f0e31028a448722d
@@ -182,6 +199,8 @@ mod tests {
         let rendered = workflow("ratchet", 85, Some(".jankurai/repo-score.json"));
         assert!(rendered.contains("cargo install jankurai --locked"));
         assert!(rendered.contains("--mode ratchet"));
+        assert!(rendered.contains("--fail-under 85"));
+        assert!(rendered.contains("Enforce score floor"));
         assert!(rendered.contains("target/jankurai/accepted-baseline.json"));
         assert!(rendered.contains("jankurai security run . --strict --profile ci"));
         assert!(rendered.contains(

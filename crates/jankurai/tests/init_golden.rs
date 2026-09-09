@@ -88,11 +88,16 @@ fn greenfield_apply_args(repo: std::path::PathBuf, profile: &str) -> init::InitA
 }
 
 fn git(repo: &std::path::Path, args: &[&str]) {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(repo)
-        .output()
-        .unwrap();
+    git_env(repo, args, &[]);
+}
+
+fn git_env(repo: &std::path::Path, args: &[&str], env: &[(&str, &str)]) {
+    let mut command = Command::new("git");
+    command.args(args).current_dir(repo);
+    for (key, value) in env {
+        command.env(key, value);
+    }
+    let output = command.output().unwrap();
     assert!(
         output.status.success(),
         "git {:?} failed\nstdout:\n{}\nstderr:\n{}",
@@ -341,7 +346,12 @@ edition = "2021"
     assert!(pre_commit.is_file());
     assert!(prepare.is_file());
     let pre_commit_text = fs::read_to_string(pre_commit).unwrap();
-    assert!(pre_commit_text.contains("--mode advisory"));
+    assert!(
+        pre_commit_text.contains("JANKURAI_HOOK_MODE:-standard"),
+        "{pre_commit_text}"
+    );
+    assert!(pre_commit_text.contains("--full"), "{pre_commit_text}");
+    assert!(pre_commit_text.contains("--no-badge"), "{pre_commit_text}");
     assert!(
         pre_commit_text.contains("JANKURAI_HOOK_REPORT_DIR"),
         "{pre_commit_text}"
@@ -549,24 +559,21 @@ edition = "2021"
         "{first_message}"
     );
 
-    fs::write(
-        dir.path().join("docs/architecture/README.md"),
-        "# Architecture\n\nCommit hook proof.\n",
+    let first_report = fs::read_to_string(
+        dir.path()
+            .join("target/jankurai/hooks/pre-commit-score.json"),
     )
     .unwrap();
-    git(dir.path(), &["add", "docs/architecture/README.md"]);
-    git(dir.path(), &["commit", "-m", "Touch architecture docs"]);
-
-    let second_message = git_stdout(dir.path(), &["log", "-1", "--format=%B"]);
-    assert!(
-        second_message.contains("Jankurai-Score:"),
-        "{second_message}"
+    let first_score = first_message
+        .lines()
+        .find(|line| line.starts_with("Jankurai-Score:"))
+        .expect("bootstrap trailer");
+    let report: serde_json::Value = serde_json::from_str(&first_report).unwrap();
+    assert_eq!(
+        format!("Jankurai-Score: {}", report["score"]),
+        first_score.trim(),
+        "bootstrap trailers must come from the compiled auditor report"
     );
-    assert!(dir.path().join(".git/jankurai/last-score.env").is_file());
-    assert!(dir
-        .path()
-        .join("target/jankurai/hooks/pre-commit-score.json")
-        .is_file());
     assert!(dir
         .path()
         .join("target/jankurai/hooks/pre-commit-score.md")
@@ -581,8 +588,102 @@ edition = "2021"
             .lines()
             .filter(|line| !line.trim().is_empty())
             .count()
-            >= 2,
+            >= 1,
         "{history}"
+    );
+    assert!(
+        history.contains(&report["score"].to_string()),
+        "history must record the compiled auditor score, not a fabricated row\n{history}"
+    );
+}
+
+#[test]
+fn managed_pre_commit_wiring_with_controlled_auditor() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    fs::write(dir.path().join("README.md"), "fixture\n").unwrap();
+    git(dir.path(), &["add", "README.md"]);
+    git(dir.path(), &["commit", "-m", "seed"]);
+    assert_command_success(
+        Command::new(binary_path())
+            .arg("hooks")
+            .arg("install")
+            .arg(dir.path())
+            .arg("--yes"),
+    );
+    let stub = dir.path().join("passing-auditor");
+    fs::write(
+        &stub,
+        r#"#!/usr/bin/env bash
+set -euo pipefail
+json=""
+md=""
+history=""
+prev=""
+for arg in "$@"; do
+  if [ "$prev" = "--json" ]; then json="$arg"; fi
+  if [ "$prev" = "--md" ]; then md="$arg"; fi
+  if [ "$prev" = "--score-history" ]; then history="$arg"; fi
+  prev="$arg"
+done
+test -n "$json"
+printf '%s\n' '{"score":90,"raw_score":90,"findings":[],"caps_applied":[],"decision":{"status":"pass","passed":true,"minimum_score":85,"hard_findings":0,"soft_findings":0}}' > "$json"
+if [ -n "$md" ]; then printf 'score 90\n' > "$md"; fi
+if [ -n "$history" ]; then printf '%s\n' '{"score":90}' >> "$history"; fi
+"#,
+    )
+    .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = fs::metadata(&stub).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&stub, permissions).unwrap();
+    }
+    let env_path = dir.path().join(".git/jankurai/env");
+    let mut env = fs::read_to_string(&env_path).unwrap();
+    env.push_str(&format!("JANKURAI_BIN='{}'\n", stub.display()));
+    fs::write(&env_path, env).unwrap();
+    fs::write(dir.path().join("NOTE.md"), "hook wiring\n").unwrap();
+    git(dir.path(), &["add", "NOTE.md"]);
+    git(
+        dir.path(),
+        &["commit", "-m", "Touch with controlled auditor"],
+    );
+    let message = git_stdout(dir.path(), &["log", "-1", "--format=%B"]);
+    assert!(message.contains("Jankurai-Score:"), "{message}");
+    assert!(dir.path().join(".git/jankurai/last-score.env").is_file());
+}
+
+#[test]
+fn managed_pre_commit_blocks_failing_standard_audit() {
+    let dir = tempdir().unwrap();
+    init_git_repo(dir.path());
+    fs::write(dir.path().join("README.md"), "fixture\n").unwrap();
+    git(dir.path(), &["add", "README.md"]);
+    git(dir.path(), &["commit", "-m", "seed"]);
+    assert_command_success(
+        Command::new(binary_path())
+            .arg("hooks")
+            .arg("install")
+            .arg(dir.path())
+            .arg("--yes"),
+    );
+    fs::write(dir.path().join("NOTE.md"), "change\n").unwrap();
+    git(dir.path(), &["add", "NOTE.md"]);
+    let output = Command::new("git")
+        .args(["commit", "-m", "should be blocked"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    assert!(
+        !output.status.success(),
+        "blocking hook should reject the commit"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("audit decision failed") || stderr.contains("pre-commit audit failed"),
+        "{stderr}"
     );
 }
 

@@ -215,11 +215,26 @@ report_md="$report_dir/pre-commit-score.md"
 report_history_jsonl="$report_dir/pre-commit-score-history.jsonl"
 report_history_csv="$report_dir/pre-commit-score-history.csv"
 
+hook_mode="${JANKURAI_HOOK_MODE:-standard}"
+if [ "$hook_mode" != standard ]; then
+  echo "jankurai pre-commit score gate requires standard mode" >&2
+  exit 2
+fi
+hook_floor="${JANKURAI_FAIL_UNDER:-85}"
+if [[ ! "$hook_floor" =~ ^(0|[1-9][0-9]?|100)$ ]]; then
+  echo "JANKURAI_FAIL_UNDER must be an integer from 0 through 100" >&2
+  exit 2
+fi
+report_work="$(mktemp -d "$report_dir/.pre-commit.XXXXXXXX")"
+trap 'rm -rf -- "$report_work"' EXIT
 audit_args=(
   audit .
-  --mode advisory
-  --json "$report_json"
-  --md "$report_md"
+  --mode "$hook_mode"
+  --full
+  --no-badge
+  --fail-under "$hook_floor"
+  --json "$report_work/score.json"
+  --md "$report_work/score.md"
   --score-history "$report_history_jsonl"
   --score-history-csv "$report_history_csv"
 )
@@ -242,28 +257,42 @@ if ! "$jankurai_cmd" "${audit_args[@]}"; then
   exit 1
 fi
 
+# Only a fresh coherent successful report may establish the score gate.
+if ! jq -e --argjson floor "$hook_floor" '
+type == "object"
+  and (.score | type == "number" and . == floor and . >= 0 and . <= 100)
+  and (.raw_score | type == "number" and . == floor and . >= 0 and . <= 100)
+  and (.findings | type == "array")
+  and (.caps_applied | type == "array" and all(.[]; type == "string"))
+  and (.decision | type == "object")
+  and (.decision.status == "pass" and .decision.passed == true)
+  and (.decision.minimum_score | type == "number" and . == floor and . >= 0 and . <= 100)
+  and (.decision.hard_findings | type == "number" and . == floor and . == 0)
+  and (.decision.soft_findings | type == "number" and . == floor and . >= 0)
+  and ((has("policy") | not) or
+       ((.policy | type == "object") and
+        (.policy.minimum_score | type == "number" and . == floor and . >= 0 and . <= 100) and
+        .policy.minimum_score == .decision.minimum_score))
+  and (.score >= $floor and .score >= .decision.minimum_score)
+  and ((.decision | has("ratchet") | not) or .decision.ratchet == null or
+       (.decision.ratchet | type == "object" and .passed == true))
+' "$report_work/score.json" >/dev/null; then
+  echo "jankurai pre-commit report is invalid or failed its score/policy gate" >&2
+  exit 1
+fi
+mv -- "$report_work/score.json" "$report_json"
+mv -- "$report_work/score.md" "$report_md"
+
 if [ "${JANKURAI_HOOK_STAGE_ARTIFACTS:-}" = "1" ]; then
   git add -- "$report_json" "$report_md" "$report_history_jsonl" "$report_history_csv" 2>/dev/null || true
 fi
 
 report_path="$report_json"
-json_int() {
-  sed -n "s/^[[:space:]]*\"$1\":[[:space:]]*\([-0-9][0-9]*\).*/\1/p" "$report_path" | head -n 1
-}
-score="$(json_int score)"
-raw_score="$(json_int raw_score)"
-minimum_score="$(json_int minimum_score)"
-hard_findings="$(json_int hard_findings)"
-finding_count="$(grep -c '^[[:space:]]*"check_id":' "$report_path" || true)"
-
-score="${score:-0}"
-raw_score="${raw_score:-$score}"
-minimum_score="${minimum_score:-85}"
-hard_findings="${hard_findings:-0}"
+score="$(jq -er '.score' "$report_path")"
+raw_score="$(jq -er '.raw_score' "$report_path")"
+hard_findings="$(jq -er '.decision.hard_findings' "$report_path")"
+finding_count="$(jq -er '.findings | length' "$report_path")"
 decision="pass"
-if [ "$hard_findings" -gt 0 ] || [ "$score" -lt "$minimum_score" ]; then
-  decision="fail"
-fi
 
 cat > "$jankurai_dir/last-score.env" <<EOF
 JANKURAI_SCORE='$score'
