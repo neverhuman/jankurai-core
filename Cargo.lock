@@ -929,7 +929,7 @@ dependencies = [
 [[package]]
 name = "jankurai-proofbind"
 version = "0.8.0"
-source = "git+https://github.com/neverhuman/jankurai-tools-proof.git?tag=ci-6a4e0030294aeb14897f317b257a70ffbca3049d#6a4e0030294aeb14897f317b257a70ffbca3049d"
+source = "git+https://github.com/neverhuman/jankurai-tools-proof.git?tag=ci-67f234a0cd72d79ff705a60b7106cf056a03c829#67f234a0cd72d79ff705a60b7106cf056a03c829"
 dependencies = [
  "anyhow",
  "serde",
@@ -940,7 +940,7 @@ dependencies = [
 [[package]]
 name = "jankurai-proofmark"
 version = "0.8.0"
-source = "git+https://github.com/neverhuman/jankurai-tools-proof.git?tag=ci-6a4e0030294aeb14897f317b257a70ffbca3049d#6a4e0030294aeb14897f317b257a70ffbca3049d"
+source = "git+https://github.com/neverhuman/jankurai-tools-proof.git?tag=ci-67f234a0cd72d79ff705a60b7106cf056a03c829#67f234a0cd72d79ff705a60b7106cf056a03c829"
 dependencies = [
  "anyhow",
  "jankurai-proofbind",
