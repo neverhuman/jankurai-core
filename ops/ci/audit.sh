@@ -20,9 +20,23 @@ if [[ -f agent/badge.toml ]]; then
     --label jankurai
 fi
 
-mkdir -p .jankurai
+mkdir -p .jankurai target/jankurai
+# Select the executable Cargo actually built, including custom target paths.
+# Invoke those bytes directly and retain their digest before running the audit.
+cargo build --locked --offline -p jankurai --bin jankurai --message-format=json \
+  > target/jankurai/auditor-build.jsonl
+auditor="$(jq -ser '
+  [.[] | select(.reason == "compiler-artifact" and .target.name == "jankurai"
+    and .target.kind == ["bin"] and .executable != null) | .executable]
+  | if length == 1 then .[0] else error("expected one auditor executable") end
+' target/jankurai/auditor-build.jsonl)"
+if [[ ! -f "$auditor" || -L "$auditor" || ! -x "$auditor" ]]; then
+  echo 'Cargo auditor must be a regular executable, not a symlink' >&2
+  exit 1
+fi
+sha256sum "$auditor" > target/jankurai/auditor.sha256
 log "audit lane: exact-source full audit -> .jankurai/repo-score.{json,md}"
-cargo run --locked --offline -p jankurai -- audit . \
+"$auditor" audit . \
   --full \
   --baseline agent/baselines/main.repo-score.json \
   --no-score-history \
@@ -30,6 +44,9 @@ cargo run --locked --offline -p jankurai -- audit . \
   --fail-on high \
   --json .jankurai/repo-score.json \
   --md .jankurai/repo-score.md
+sha256sum --check target/jankurai/auditor.sha256
+sha256sum agent/baselines/main.repo-score.json .jankurai/repo-score.json \
+  .jankurai/repo-score.md > target/jankurai/auditor-reports.sha256
 
 jq -e --slurpfile baseline agent/baselines/main.repo-score.json '
   .score >= ($baseline[0].score)
