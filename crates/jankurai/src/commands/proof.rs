@@ -1317,9 +1317,25 @@ fn insert_changed_path(paths: &mut BTreeSet<String>, rel: String, original: &Pat
 fn rules_covered_for_run(run: &PlannedRun) -> Vec<RuleCoverage> {
     let mut rules = Vec::new();
     match run.lane.as_str() {
-        "fast" | "audit" => {
+        // Component required lanes must emit HLT-008/HLT-024 so proofbind can
+        // bind real receipts. Hard-coded producer mapping only — do not copy
+        // target-repo proof-lanes.toml into receipts (Root rejected invent).
+        "required" => {
             push_rule(&mut rules, "HLT-003-OWNERLESS-PATH");
             push_rule(&mut rules, "HLT-004-UNMAPPED-PROOF");
+            push_rule(&mut rules, "HLT-008-FALSE-GREEN-RISK");
+            push_rule(&mut rules, "HLT-024-AGENT-TOOL-SUPPLY-GAP");
+        }
+        "fast" => {
+            push_rule(&mut rules, "HLT-003-OWNERLESS-PATH");
+            push_rule(&mut rules, "HLT-004-UNMAPPED-PROOF");
+            push_rule(&mut rules, "HLT-008-FALSE-GREEN-RISK");
+        }
+        "audit" => {
+            push_rule(&mut rules, "HLT-003-OWNERLESS-PATH");
+            push_rule(&mut rules, "HLT-004-UNMAPPED-PROOF");
+            push_rule(&mut rules, "HLT-008-FALSE-GREEN-RISK");
+            push_rule(&mut rules, "HLT-024-AGENT-TOOL-SUPPLY-GAP");
         }
         "contract" => {
             push_rule(&mut rules, "HLT-002-GENERATED-MUTATION");
@@ -1343,6 +1359,7 @@ fn rules_covered_for_run(run: &PlannedRun) -> Vec<RuleCoverage> {
             push_rule(&mut rules, "HLT-012-OVERBROAD-AGENCY");
             push_rule(&mut rules, "HLT-016-SUPPLY-CHAIN-DRIFT");
             push_rule(&mut rules, "HLT-020-CI-HARDENING-GAP");
+            push_rule(&mut rules, "HLT-024-AGENT-TOOL-SUPPLY-GAP");
         }
         "observability" => {
             push_rule(&mut rules, "HLT-017-OPAQUE-OBSERVABILITY");
