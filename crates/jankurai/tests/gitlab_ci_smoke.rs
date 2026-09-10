@@ -17,7 +17,9 @@ fn split_core_uses_local_reproducible_ci_entrypoints() {
     assert!(local.contains("ops/ci/quality-gates.sh"));
 
     let audit = fs::read_to_string(root.join("ops/ci/audit.sh")).unwrap();
-    assert!(audit.contains("cargo run --locked --offline -p jankurai -- audit ."));
+    assert!(audit.contains("cargo build --locked --offline -p jankurai --bin jankurai"));
+    assert!(audit.contains("\"$auditor\" audit ."));
+    assert!(audit.contains("sha256sum --check target/jankurai/auditor.sha256"));
     assert!(audit.contains("--full"));
     assert!(audit.contains("agent/baselines/main.repo-score.json"));
     assert!(audit.contains(".caps_applied | length"));
