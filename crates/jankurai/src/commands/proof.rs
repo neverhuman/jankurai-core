@@ -244,6 +244,13 @@ pub fn run_proof_verify(args: ProofVerifyArgs) -> Result<()> {
         }
     }
     crate::render::write_markdown(&args.md, &render_verification_markdown(&verification))?;
+    if verification.verdict != "pass" {
+        anyhow::bail!(
+            "proof verification {}: {}",
+            verification.verdict,
+            verification.issues.join("; ")
+        );
+    }
     Ok(())
 }
 
@@ -745,6 +752,25 @@ fn verify_proof_evidence(
     if evidence.changed_paths != plan.changed_paths {
         issues.push("evidence changed_paths do not match plan changed_paths".to_string());
     }
+    let runs = if plan.planned_runs.is_empty() {
+        fallback_runs_from_plan(&plan)
+    } else {
+        plan.planned_runs.clone()
+    };
+    let expected: BTreeSet<_> = runs.iter().map(|run| (&run.lane, &run.command)).collect();
+    if expected.is_empty() || expected.len() != runs.len() {
+        issues.push("missing unique nonempty planned run inventory".to_string());
+    }
+    if evidence.commands
+        != runs
+            .iter()
+            .map(|run| run.command.clone())
+            .collect::<Vec<_>>()
+    {
+        issues.push("evidence command inventory mismatch".to_string());
+    }
+    let mut observed = BTreeSet::new();
+    let mut receipt_paths = BTreeSet::new();
 
     let current_manifest_fingerprints = repo_manifest_fingerprints(repo);
     push_manifest_mismatch(
@@ -788,9 +814,14 @@ fn verify_proof_evidence(
     let mut command_digests = Vec::new();
     let mut log_digests = Vec::new();
     let mut artifact_digests = Vec::new();
-    let mut coverage_verdicts = Vec::new();
+    if !evidence.coverage_verdicts.is_empty() {
+        issues.push("unverified rule coverage in imported evidence index".to_string());
+    }
 
     for receipt_rel in &evidence.receipts {
+        if !receipt_paths.insert(receipt_rel) {
+            issues.push(format!("duplicate receipt inventory entry `{receipt_rel}`"));
+        }
         let receipt_path = repo.join(receipt_rel);
         if !receipt_path.is_file() {
             issues.push(format!("missing proof receipt `{receipt_rel}`"));
@@ -802,6 +833,13 @@ fn verify_proof_evidence(
             .with_context(|| format!("parse proof receipt {}", receipt_path.display()))?;
         validation::validate_value(repo, ArtifactSchema::ProofReceipt, &receipt_json)?;
         let receipt: ProofReceipt = serde_json::from_value(receipt_json.clone())?;
+        let key = (receipt.lane.clone(), receipt.command.clone());
+        if !expected.contains(&(&key.0, &key.1)) {
+            issues.push(format!("unexpected receipt run `{}`: `{}`", key.0, key.1));
+        }
+        if !observed.insert(key) {
+            issues.push(format!("duplicate receipt run in `{receipt_rel}`"));
+        }
 
         let receipt_digest = sha256_file(&receipt_path)?;
         artifact_digests.push(ArtifactDigest {
@@ -853,7 +891,11 @@ fn verify_proof_evidence(
             issues.push(format!("receipt `{receipt_rel}` missing log path"));
         }
 
-        coverage_verdicts.extend(receipt.rules_covered.clone());
+        if !receipt.rules_covered.is_empty() {
+            issues.push(format!(
+                "unverified rule coverage in imported receipt `{receipt_rel}`"
+            ));
+        }
         if receipt.exit_code != 0 {
             issues.push(format!(
                 "receipt `{receipt_rel}` exited with status {}",
@@ -862,6 +904,14 @@ fn verify_proof_evidence(
         }
         if receipt.plan_digest.as_deref() != Some(current_plan_digest.as_str()) {
             issues.push(format!("receipt `{receipt_rel}` plan digest mismatch"));
+        }
+    }
+
+    for (lane, command) in expected {
+        if !observed.contains(&(lane.clone(), command.clone())) {
+            issues.push(format!(
+                "missing required receipt for `{lane}`: `{command}`"
+            ));
         }
     }
 
@@ -891,11 +941,8 @@ fn verify_proof_evidence(
         } else {
             artifact_digests
         },
-        coverage_verdicts: if coverage_verdicts.is_empty() {
-            evidence.coverage_verdicts.clone()
-        } else {
-            coverage_verdicts
-        },
+        // Digest consistency checks cannot authenticate an execution producer.
+        coverage_verdicts: Vec::new(),
         verdict,
         issues,
     })
@@ -919,6 +966,12 @@ fn push_manifest_mismatch(
 fn classify_verdict(issues: &[String]) -> String {
     if issues.is_empty() {
         return "pass".to_string();
+    }
+    if issues
+        .iter()
+        .any(|issue| issue.contains("unverified rule coverage"))
+    {
+        return "blocked".to_string();
     }
     if issues
         .iter()
@@ -1220,7 +1273,9 @@ fn execute_run(
             path: display_relative(repo, &log_file),
             sha256: log_sha256,
         }],
-        rules_covered: rules_covered_for_run(run),
+        // A repository selects both the command and its lane name. A successful
+        // subprocess is an outcome, not a verified rule-specific observation.
+        rules_covered: Vec::new(),
         retryable,
         stdout_stderr_bytes,
         extensions: serde_json::Map::new(),
@@ -1312,84 +1367,6 @@ fn insert_changed_path(paths: &mut BTreeSet<String>, rel: String, original: &Pat
     }
     paths.insert(normalized);
     Ok(())
-}
-
-fn rules_covered_for_run(run: &PlannedRun) -> Vec<RuleCoverage> {
-    let mut rules = Vec::new();
-    match run.lane.as_str() {
-        // Component required lanes must emit HLT-008/HLT-024 so proofbind can
-        // bind real receipts. Hard-coded producer mapping only — do not copy
-        // target-repo proof-lanes.toml into receipts (Root rejected invent).
-        "required" => {
-            push_rule(&mut rules, "HLT-003-OWNERLESS-PATH");
-            push_rule(&mut rules, "HLT-004-UNMAPPED-PROOF");
-            push_rule(&mut rules, "HLT-008-FALSE-GREEN-RISK");
-            push_rule(&mut rules, "HLT-024-AGENT-TOOL-SUPPLY-GAP");
-        }
-        "fast" => {
-            push_rule(&mut rules, "HLT-003-OWNERLESS-PATH");
-            push_rule(&mut rules, "HLT-004-UNMAPPED-PROOF");
-            push_rule(&mut rules, "HLT-008-FALSE-GREEN-RISK");
-        }
-        "audit" => {
-            push_rule(&mut rules, "HLT-003-OWNERLESS-PATH");
-            push_rule(&mut rules, "HLT-004-UNMAPPED-PROOF");
-            push_rule(&mut rules, "HLT-008-FALSE-GREEN-RISK");
-            push_rule(&mut rules, "HLT-024-AGENT-TOOL-SUPPLY-GAP");
-        }
-        "contract" => {
-            push_rule(&mut rules, "HLT-002-GENERATED-MUTATION");
-            push_rule(&mut rules, "HLT-007-HANDWRITTEN-CONTRACT");
-        }
-        "db" => {
-            push_rule(&mut rules, "HLT-006-DIRECT-DB-WRONG-LAYER");
-            push_rule(&mut rules, "HLT-019-STREAMING-RUNTIME-DRIFT");
-        }
-        "db-migration-analyze" => {
-            push_rule(&mut rules, "HLT-021-DESTRUCTIVE-MIGRATION");
-        }
-        "web" | "ux-qa" => {
-            push_rule(&mut rules, "HLT-013-RENDERED-UX-GAP");
-            push_rule(&mut rules, "HLT-014-A11Y-GAP");
-        }
-        "security" => {
-            push_rule(&mut rules, "HLT-009-GENERATED-SECURITY");
-            push_rule(&mut rules, "HLT-010-SECRET-SPRAWL");
-            push_rule(&mut rules, "HLT-011-PROMPT-INJECTION");
-            push_rule(&mut rules, "HLT-012-OVERBROAD-AGENCY");
-            push_rule(&mut rules, "HLT-016-SUPPLY-CHAIN-DRIFT");
-            push_rule(&mut rules, "HLT-020-CI-HARDENING-GAP");
-            push_rule(&mut rules, "HLT-024-AGENT-TOOL-SUPPLY-GAP");
-        }
-        "observability" => {
-            push_rule(&mut rules, "HLT-017-OPAQUE-OBSERVABILITY");
-        }
-        _ => {}
-    }
-    rules
-}
-
-fn push_rule(rules: &mut Vec<RuleCoverage>, rule_id: &str) {
-    if crate::audit::rules::lookup(rule_id).is_none() {
-        return;
-    }
-    if rules
-        .iter()
-        .any(|coverage| rule_coverage_id(coverage) == rule_id)
-    {
-        return;
-    }
-    rules.push(RuleCoverage::Rich {
-        rule_id: rule_id.to_string(),
-        status: "covered".to_string(),
-    });
-}
-
-fn rule_coverage_id(coverage: &RuleCoverage) -> &str {
-    match coverage {
-        RuleCoverage::Rich { rule_id, .. } => rule_id.as_str(),
-        RuleCoverage::Simple(rule_id) => rule_id.as_str(),
-    }
 }
 
 fn receipt_file_name(index: usize, lane: &str, command: &str) -> String {
