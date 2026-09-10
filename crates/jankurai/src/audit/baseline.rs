@@ -39,7 +39,8 @@ pub fn compare_report_to_baseline(report: &Report, baseline_path: &Path) -> Resu
         .difference(&baseline_findings)
         .cloned()
         .collect::<Vec<_>>();
-    let policy_changed = baseline_policy_fingerprint != report.policy_fingerprint;
+    let policy_changed = baseline_policy_fingerprint != report.policy_fingerprint
+        && !super::outcome::matches_legacy_policy(report, &baseline)?;
     let version_compatible = baseline_schema_version == report.schema_version
         && baseline_standard_version == report.standard_version;
     let score_delta = report.score - baseline_score;

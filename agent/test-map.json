@@ -132,6 +132,14 @@
     "deny.toml": {
       "command": "bash scripts/ci-local.sh security",
       "purpose": "enforce the locked dependency advisory, source, and ban policy"
+    },
+    "crates/jankurai/src/audit/outcome.rs": {
+      "command": "cargo test -p jankurai --test audit_outcome_integrity --test audit_enforcement_smoke --test baseline_ratchet_smoke",
+      "purpose": "verify effective policy, complete inputs, truthful outcomes and preserved ratchets"
+    },
+    "crates/jankurai/tests/audit_outcome_integrity.rs": {
+      "command": "cargo test -p jankurai --test audit_outcome_integrity",
+      "purpose": "exercise policy drift, metadata forgery, incomplete inputs and non-executing imported proof"
     }
   }
 }

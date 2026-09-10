@@ -107,7 +107,7 @@ fn explicit_empty_fail_on_stays_empty() {
 }
 
 #[test]
-fn fail_on_policy_controls_hard_findings() {
+fn fail_on_policy_counts_do_not_erase_conformance_blockers() {
     let repo = tempdir().unwrap();
     write_base_repo(repo.path());
     fs::write(
@@ -127,7 +127,18 @@ fn fail_on_policy_controls_hard_findings() {
             "critical",
         ],
     );
-    assert!(critical_only.status.success());
+    assert!(!critical_only.status.success());
+    let report: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(repo.path().join("target/jankurai/repo-score.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(report["decision"]["hard_findings"], 0);
+    assert_eq!(report["decision"]["passed"], false);
+    assert_eq!(report["conformance_decision"], "block");
+    assert!(!report["conformance_blockers"]
+        .as_array()
+        .unwrap()
+        .is_empty());
 
     let medium_repo = tempdir().unwrap();
     write_base_repo(medium_repo.path());

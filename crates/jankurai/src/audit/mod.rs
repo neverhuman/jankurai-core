@@ -16,6 +16,7 @@ pub mod fs;
 pub mod fs_policy;
 pub mod helpers;
 pub mod language_rules;
+pub mod outcome;
 pub mod policy;
 pub mod profile_structure;
 pub mod proofbind_artifact;
@@ -39,6 +40,7 @@ use anyhow::Result;
 use caps::{caps_applied, CAPS};
 use finding_builder::{dimension_soft_route, FindingBuilder};
 use helpers::AuditContext;
+pub use outcome::report_decision;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
@@ -58,6 +60,12 @@ pub struct AuditOptions {
 pub struct AuditTimings {
     pub total_ms: u128,
     pub phases: Vec<AuditTimingPhase>,
+}
+
+struct AuditRun {
+    started: Instant,
+    timings: AuditTimings,
+    policy: outcome::ResolvedPolicy,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -99,12 +107,23 @@ pub fn run_audit_timed_with_options(
     changed: &[PathBuf],
     options: AuditOptions,
 ) -> Result<(Report, AuditTimings)> {
+    let policy = outcome::resolve_policy(root, None, None, &[], policy::AuditMode::Standard)?;
+    run_audit_timed_with_policy(root, changed, options, policy)
+}
+
+pub fn run_audit_timed_with_policy(
+    root: &Path,
+    changed: &[PathBuf],
+    options: AuditOptions,
+    policy: outcome::ResolvedPolicy,
+) -> Result<(Report, AuditTimings)> {
+    policy.require_current(root)?;
     let started = Instant::now();
     let mut timings = AuditTimings::default();
     let scope_paths: Vec<String> = changed
         .iter()
-        .filter_map(|p| normalize_changed_path(root, p))
-        .collect();
+        .map(|p| normalize_changed_path(root, p))
+        .collect::<Result<_>>()?;
     let inventory_options = fs::InventoryOptions::from_policy(root);
     let inventory_started = Instant::now();
     let inventory = if options.changed_fast {
@@ -123,8 +142,11 @@ pub fn run_audit_timed_with_options(
         scope_paths,
         &options,
         changed,
-        started,
-        timings,
+        AuditRun {
+            started,
+            timings,
+            policy,
+        },
     )
 }
 
@@ -149,6 +171,7 @@ pub fn run_candidate_audit(
     root: &Path,
     opts: CandidateAuditOptions,
 ) -> Result<(Report, AuditTimings)> {
+    let policy = outcome::resolve_policy(root, None, None, &[], policy::AuditMode::Standard)?;
     let started = Instant::now();
     let mut timings = AuditTimings::default();
     let inventory_options = fs::InventoryOptions::from_policy(root);
@@ -170,8 +193,11 @@ pub fn run_candidate_audit(
         opts.scope_paths,
         &opts.options,
         &[],
-        started,
-        timings,
+        AuditRun {
+            started,
+            timings,
+            policy,
+        },
     )
 }
 
@@ -181,9 +207,13 @@ fn run_audit_inner(
     scope_paths: Vec<String>,
     options: &AuditOptions,
     changed: &[PathBuf],
-    started: Instant,
-    mut timings: AuditTimings,
+    run: AuditRun,
 ) -> Result<(Report, AuditTimings)> {
+    let AuditRun {
+        started,
+        mut timings,
+        policy,
+    } = run;
     let scope_files = if scope_paths.is_empty() {
         all_files.clone()
     } else {
@@ -237,7 +267,9 @@ fn run_audit_inner(
         .iter()
         .filter_map(|c| CAPS.iter().find(|(id, _)| id == c).map(|(_, m)| *m))
         .fold(raw_score, |acc, cap| acc.min(cap));
-    let policy = load_policy(root)?;
+    let resolved_policy = policy;
+    let policy = &resolved_policy.summary;
+    let policy_fingerprint = resolved_policy.fingerprint.clone();
     let ux_qa = attach_ux_report_artifact(root, analyzers::ux_qa_status(&ctx));
     let security_evidence_artifact = security_artifact::load_report_summary(root);
     let tool_adoption = analyzers::tool_adoption::status(&ctx);
@@ -256,18 +288,14 @@ fn run_audit_inner(
     findings.extend(coverage::score_findings(&coverage_ingest));
     let agent_fix_queue = fix_queue::build_agent_fix_queue(&findings);
     timings.record_duration("findings", findings_started.elapsed());
-    let decision = report_decision(final_score, &findings, &policy);
-    let (observed_conformance_level, conformance_decision, conformance_blockers) =
-        conformance_summary(&decision, &findings);
     let git = git_summary(root, changed);
-    let dirty_worktree = git.dirty_worktree.unwrap_or(false);
+    let dirty_worktree = git.dirty_worktree.unwrap_or(true);
     let proof_receipts = load_proof_receipts(root, options.proof_receipts.as_deref())?;
-    let versions = report_versions(root);
+    let versions = report_versions(root)?;
     let mut report = Report {
         report_fingerprint: "sha256:pending".into(),
         input_fingerprint: input_fingerprint(&ctx),
-        policy_fingerprint: file_fingerprint(&root.join("agent/audit-policy.toml"))
-            .unwrap_or_else(missing_sha256),
+        policy_fingerprint,
         manifest_fingerprints: manifest_fingerprints(root),
         dirty_worktree,
         generated_at: started_at(),
@@ -280,9 +308,9 @@ fn run_audit_inner(
         target_stack_id: versions.target_stack_id,
         target_stack: TARGET_STACK.into(),
         claimed_conformance_level: "HL3".into(),
-        observed_conformance_level,
-        conformance_decision,
-        conformance_blockers,
+        observed_conformance_level: String::new(),
+        conformance_decision: String::new(),
+        conformance_blockers: vec![],
         repo: root.display().to_string(),
         run_id: Some(run_id()),
         started_at: Some(started_at()),
@@ -299,9 +327,9 @@ fn run_audit_inner(
         },
         score: final_score,
         raw_score,
-        decision: Some(decision),
+        decision: None,
         git: Some(git),
-        policy: Some(policy),
+        policy: Some(policy.clone()),
         proof_receipts,
         caps_applied,
         hard_rules: CAPS
@@ -328,6 +356,8 @@ fn run_audit_inner(
         findings,
         agent_fix_queue,
     };
+    resolved_policy.require_current(root)?;
+    outcome::finalize(&mut report, None)?;
     report.report_fingerprint = report_fingerprint(&report);
     timings.total_ms = started.elapsed().as_millis();
     Ok((report, timings))
@@ -341,45 +371,51 @@ struct ReportVersions {
     target_stack_id: String,
 }
 
-fn report_versions(root: &Path) -> ReportVersions {
+fn report_versions(root: &Path) -> Result<ReportVersions> {
     let mut versions = ReportVersions {
         standard_version: STANDARD_VERSION.into(),
-        auditor_version: AUDITOR_VERSION.into(),
+        auditor_version: env!("CARGO_PKG_VERSION").into(),
         schema_version: SCHEMA_VERSION.into(),
         paper_edition: PAPER_EDITION.into(),
         target_stack_id: TARGET_STACK_ID.into(),
     };
-    if let Ok(text) = std::fs::read_to_string(root.join("agent/standard-version.toml")) {
-        if let Ok(value) = toml::from_str::<toml::Value>(&text) {
-            versions.standard_version =
-                toml_string(&value, "standard_version").unwrap_or(versions.standard_version);
-            versions.auditor_version =
-                toml_string(&value, "auditor_version").unwrap_or(versions.auditor_version);
-            versions.schema_version =
-                toml_string(&value, "schema_version").unwrap_or(versions.schema_version);
-            versions.paper_edition =
-                toml_string(&value, "paper_edition").unwrap_or(versions.paper_edition);
-            versions.target_stack_id =
-                toml_string(&value, "target_stack").unwrap_or(versions.target_stack_id);
-            return versions;
-        }
-    }
-    if let Some(version) = standard_doc_version(root) {
+    if let Some(text) = outcome::read_source(&root.join("agent/standard-version.toml"))? {
+        let value = toml::from_str::<toml::Value>(&text)
+            .map_err(|error| anyhow::anyhow!("invalid standard version manifest: {error}"))?;
+        // Repository declarations describe its adopted standard, never the
+        // identity of the executable or the schema that produced this report.
+        versions.standard_version =
+            toml_string(&value, "standard_version")?.unwrap_or(versions.standard_version);
+        versions.paper_edition =
+            toml_string(&value, "paper_edition")?.unwrap_or(versions.paper_edition);
+        versions.target_stack_id =
+            toml_string(&value, "target_stack")?.unwrap_or(versions.target_stack_id);
+        let _declared_auditor = toml_string(&value, "auditor_version")?;
+        let _declared_schema = toml_string(&value, "schema_version")?;
+    } else if let Some(version) = standard_doc_version(root)? {
         versions.standard_version = version;
     }
-    versions
+    Ok(versions)
 }
 
-fn toml_string(value: &toml::Value, key: &str) -> Option<String> {
-    value.get(key)?.as_str().map(ToString::to_string)
+fn toml_string(value: &toml::Value, key: &str) -> Result<Option<String>> {
+    match value.get(key) {
+        None => Ok(None),
+        Some(value) => match value.as_str() {
+            Some(text) if !text.trim().is_empty() => Ok(Some(text.to_owned())),
+            _ => anyhow::bail!(
+                "invalid standard version manifest: `{key}` must be a nonempty string"
+            ),
+        },
+    }
 }
 
-fn standard_doc_version(root: &Path) -> Option<String> {
+fn standard_doc_version(root: &Path) -> Result<Option<String>> {
     for path in [
         root.join("agent/JANKURAI_STANDARD.md"),
         root.join("docs/agent-native-standard.md"),
     ] {
-        let Ok(text) = std::fs::read_to_string(path) else {
+        let Some(text) = outcome::read_source(&path)? else {
             continue;
         };
         for line in text.lines() {
@@ -390,11 +426,11 @@ fn standard_doc_version(root: &Path) -> Option<String> {
                 continue;
             };
             if !version.trim().is_empty() {
-                return Some(version.trim().to_string());
+                return Ok(Some(version.trim().to_string()));
             }
         }
     }
-    None
+    Ok(None)
 }
 
 pub fn rebuild_agent_fix_queue(report: &mut Report) {
@@ -406,130 +442,9 @@ fn attach_ux_report_artifact(root: &Path, mut readiness: UxQaReadiness) -> UxQaR
     readiness
 }
 
-fn load_policy(root: &Path) -> Result<PolicySummary> {
-    use serde::Deserialize;
-    #[derive(Debug, Deserialize)]
-    struct AuditPolicyFile {
-        #[serde(default = "default_minimum_score")]
-        minimum_score: i32,
-        #[serde(default = "default_fail_on")]
-        fail_on: Vec<String>,
-        #[serde(default = "default_advisory_on")]
-        advisory_on: Vec<String>,
-    }
-
-    fn default_minimum_score() -> i32 {
-        85
-    }
-
-    fn default_fail_on() -> Vec<String> {
-        vec!["critical".into(), "high".into()]
-    }
-
-    fn default_advisory_on() -> Vec<String> {
-        vec!["medium".into(), "low".into()]
-    }
-
-    let path = root.join("agent/audit-policy.toml");
-    let parsed = match std::fs::read_to_string(&path) {
-        Ok(text) => toml::from_str::<AuditPolicyFile>(&text)
-            .map_err(|err| anyhow::anyhow!("invalid audit policy {}: {err}", path.display()))?,
-        Err(_) => AuditPolicyFile {
-            minimum_score: default_minimum_score(),
-            fail_on: default_fail_on(),
-            advisory_on: default_advisory_on(),
-        },
-    };
-    validate_policy_severities("fail_on", &parsed.fail_on)?;
-    validate_policy_severities("advisory_on", &parsed.advisory_on)?;
-    Ok(PolicySummary {
-        path: path.display().to_string(),
-        minimum_score: parsed.minimum_score,
-        fail_on: parsed.fail_on,
-        advisory_on: parsed.advisory_on,
-        mode: Some("standard".into()),
-        standard_version: Some(STANDARD_VERSION.into()),
-        auditor_version: Some(AUDITOR_VERSION.into()),
-        schema_version: Some(SCHEMA_VERSION.into()),
-        paper_edition: Some(PAPER_EDITION.into()),
-        target_stack: Some(TARGET_STACK_ID.into()),
-    })
-}
-
-fn validate_policy_severities(field: &str, severities: &[String]) -> Result<()> {
-    for severity in severities {
-        if !matches!(
-            severity.as_str(),
-            "critical" | "high" | "medium" | "low" | "info"
-        ) {
-            anyhow::bail!(
-                "invalid audit policy severity `{severity}` in {field}; expected critical, high, medium, low, or info"
-            );
-        }
-    }
-    Ok(())
-}
-
-pub fn report_decision(score: i32, findings: &[Finding], policy: &PolicySummary) -> ReportDecision {
-    let hard_findings = findings
-        .iter()
-        .filter(|f| {
-            policy
-                .fail_on
-                .iter()
-                .any(|severity| severity == &f.severity)
-        })
-        .count();
-    let soft_findings = findings.len().saturating_sub(hard_findings);
-    let passed = score >= policy.minimum_score && hard_findings == 0;
-    ReportDecision {
-        status: if passed { "pass".into() } else { "fail".into() },
-        minimum_score: policy.minimum_score,
-        passed,
-        hard_findings,
-        soft_findings,
-        ratchet: Some(ReportRatchet {
-            baseline_score: score,
-            allowed_drop: 0,
-            passed,
-            score_delta: 0,
-            baseline_report_fingerprint: missing_sha256(),
-            baseline_input_fingerprint: missing_sha256(),
-            baseline_policy_fingerprint: missing_sha256(),
-            new_caps: vec![],
-            new_hard_findings: vec![],
-            policy_changed: false,
-        }),
-    }
-}
-
-fn conformance_summary(
-    decision: &ReportDecision,
-    findings: &[Finding],
-) -> (String, String, Vec<String>) {
-    let blockers: Vec<String> = findings
-        .iter()
-        .filter(|finding| matches!(finding.severity.as_str(), "critical" | "high"))
-        .map(|finding| {
-            format!(
-                "{} on {}",
-                finding.rule_id.as_deref().unwrap_or(&finding.check_id),
-                finding.path
-            )
-        })
-        .collect();
-    if decision.passed {
-        ("HL3".into(), "pass".into(), blockers)
-    } else if blockers.is_empty() {
-        ("HL2".into(), "review".into(), blockers)
-    } else {
-        ("HL2".into(), "block".into(), blockers)
-    }
-}
-
 fn git_summary(root: &Path, changed: &[PathBuf]) -> GitSummary {
     GitSummary {
-        head: git_output(root, &["rev-parse", "--short", "HEAD"]),
+        head: git_output(root, &["rev-parse", "--verify", "HEAD"]),
         base: None,
         changed_files: changed.len(),
         mode: if changed.is_empty() {
@@ -537,14 +452,17 @@ fn git_summary(root: &Path, changed: &[PathBuf]) -> GitSummary {
         } else {
             "changed".into()
         },
+        // Unversioned or unreadable Git state cannot establish a clean source.
+        // Keep the required field explicit for the shared report contract.
         dirty_worktree: Some(
             Command::new("git")
                 .args(["status", "--porcelain"])
                 .current_dir(root)
                 .output()
                 .ok()
+                .filter(|out| out.status.success())
                 .map(|out| !out.stdout.is_empty())
-                .unwrap_or(false),
+                .unwrap_or(true),
         ),
     }
 }
@@ -1592,18 +1510,40 @@ fn changed_fast_inventory_paths(scope_paths: &[String]) -> Vec<String> {
     paths.into_iter().collect()
 }
 
-fn normalize_changed_path(root: &Path, path: &Path) -> Option<String> {
+fn normalize_changed_path(root: &Path, path: &Path) -> Result<String> {
+    use std::path::Component;
+    let root = root.canonicalize()?;
     let candidate = if path.is_absolute() {
         path.to_path_buf()
     } else {
         root.join(path)
     };
-    let rel = candidate
-        .strip_prefix(root)
-        .ok()?
-        .to_string_lossy()
-        .replace('\\', "/");
-    Some(rel)
+    let relative = candidate.strip_prefix(&root).map_err(|_| {
+        anyhow::anyhow!(
+            "changed path is outside the audited repository: {}",
+            path.display()
+        )
+    })?;
+    let mut segments = Vec::new();
+    for component in relative.components() {
+        match component {
+            Component::Normal(value) => segments.push(value.to_str().ok_or_else(|| {
+                anyhow::anyhow!("changed path is not valid UTF-8: {}", path.display())
+            })?),
+            Component::CurDir => {}
+            Component::ParentDir if !segments.is_empty() => {
+                segments.pop();
+            }
+            _ => anyhow::bail!(
+                "changed path escapes the audited repository: {}",
+                path.display()
+            ),
+        }
+    }
+    if segments.is_empty() {
+        anyhow::bail!("changed path must name a repository entry; use --full to audit the root");
+    }
+    Ok(segments.join("/"))
 }
 
 pub fn changed_paths_from_git(root: &Path, base: &str) -> Result<Vec<PathBuf>> {
@@ -1662,11 +1602,20 @@ fn load_proof_receipts(root: &Path, path: Option<&str>) -> Result<Vec<ProofRecei
         return Ok(vec![]);
     };
     let path = root.join(path);
-    if !path.exists() {
-        return Ok(vec![]);
+    let metadata = std::fs::symlink_metadata(&path).map_err(|error| {
+        anyhow::anyhow!(
+            "inspect requested proof receipts {}: {error}",
+            path.display()
+        )
+    })?;
+    if !metadata.is_file() && !metadata.is_dir() {
+        anyhow::bail!(
+            "requested proof receipts must be a regular file or directory: {}",
+            path.display()
+        );
     }
     let mut entries = Vec::new();
-    if path.is_dir() {
+    if metadata.is_dir() {
         for entry in std::fs::read_dir(&path)? {
             let entry = entry?;
             let entry_path = entry.path();
@@ -1676,13 +1625,21 @@ fn load_proof_receipts(root: &Path, path: Option<&str>) -> Result<Vec<ProofRecei
             entries.push(entry_path);
         }
         entries.sort();
+        if entries.is_empty() {
+            anyhow::bail!(
+                "requested proof receipt directory contains no JSON receipts: {}",
+                path.display()
+            );
+        }
     } else {
         entries.push(path);
     }
 
     let mut receipts = Vec::new();
     for entry in entries {
-        let text = std::fs::read_to_string(&entry)?;
+        let text = outcome::read_source(&entry)?.ok_or_else(|| {
+            anyhow::anyhow!("requested proof receipt disappeared: {}", entry.display())
+        })?;
         let value: serde_json::Value = serde_json::from_str(&text)?;
         crate::validation::validate_value(
             root,
@@ -1695,7 +1652,28 @@ fn load_proof_receipts(root: &Path, path: Option<&str>) -> Result<Vec<ProofRecei
     Ok(receipts)
 }
 
+/// Imported reports remain useful diagnostics, but cannot authorize release.
+/// Only an execution observation produced inside the supervisor can do that.
 pub fn release_proof_findings(
+    root: &Path,
+    proof_receipts: Option<&str>,
+    proof_evidence: Option<&str>,
+) -> Result<Vec<Finding>> {
+    let mut findings = imported_release_proof_findings(root, proof_receipts, proof_evidence)?;
+    findings.push(release_proof_finding(
+        "release requires supervised execution; imported proof cannot establish it",
+        vec!["ordinary audit does not execute or observe the supplied proof commands".into()],
+        "HLT-008-FALSE-GREEN-RISK",
+        "proof-evidence",
+        "qualify producer-owned supervised execution before accepting release evidence",
+        "receipt",
+        "proof authority",
+        "serialized success and artifact digests do not prove supervised execution",
+    ));
+    Ok(findings)
+}
+
+fn imported_release_proof_findings(
     root: &Path,
     proof_receipts: Option<&str>,
     proof_evidence: Option<&str>,
