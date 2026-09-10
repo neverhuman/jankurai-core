@@ -286,6 +286,7 @@ fn execute_proof_plan(args: ProveArgs, plan: ProofPlan, plan_path_str: String) -
     };
 
     ensure_planned_commands_allowed(&args.repo, &runs, args.allow_unsigned_commands)?;
+    let catalog = RepoCatalog::load(&args.repo).ok();
 
     let mut receipts = Vec::new();
     let mut receipt_paths = Vec::new();
@@ -310,6 +311,7 @@ fn execute_proof_plan(args: ProveArgs, plan: ProofPlan, plan_path_str: String) -
             run,
             plan_path_str.as_str(),
             plan_digest.as_str(),
+            catalog.as_ref(),
         )?;
         let receipt_name = receipt_file_name(index, &run.lane, &run.command);
         let receipt_path = receipt_dir.join(receipt_name);
@@ -1148,6 +1150,7 @@ fn execute_run(
     run: &PlannedRun,
     plan_path: &str,
     plan_digest: &str,
+    catalog: Option<&RepoCatalog>,
 ) -> Result<ProofReceipt> {
     let started = Instant::now();
     let started_secs = SystemTime::now()
@@ -1220,7 +1223,7 @@ fn execute_run(
             path: display_relative(repo, &log_file),
             sha256: log_sha256,
         }],
-        rules_covered: rules_covered_for_run(run),
+        rules_covered: rules_covered_for_run(run, catalog),
         retryable,
         stdout_stderr_bytes,
         extensions: serde_json::Map::new(),
@@ -1314,12 +1317,42 @@ fn insert_changed_path(paths: &mut BTreeSet<String>, rel: String, original: &Pat
     Ok(())
 }
 
-fn rules_covered_for_run(run: &PlannedRun) -> Vec<RuleCoverage> {
+fn rules_covered_for_run(run: &PlannedRun, catalog: Option<&RepoCatalog>) -> Vec<RuleCoverage> {
     let mut rules = Vec::new();
+    // Prefer the target repo's agent/proof-lanes.toml declaration for this lane.
+    if let Some(catalog) = catalog {
+        if let Some(lane) = catalog
+            .proof_lanes
+            .iter()
+            .find(|lane| lane.name == run.lane)
+        {
+            if !lane.rules_covered.is_empty() {
+                for rule_id in &lane.rules_covered {
+                    push_rule(&mut rules, rule_id);
+                }
+                return rules;
+            }
+        }
+    }
     match run.lane.as_str() {
-        "fast" | "audit" => {
+        // Component required lanes (docs/CI maps) must emit HLT-008/HLT-024 so
+        // proofbind can bind real receipts; empty coverage left 42 obligations missing.
+        "required" => {
             push_rule(&mut rules, "HLT-003-OWNERLESS-PATH");
             push_rule(&mut rules, "HLT-004-UNMAPPED-PROOF");
+            push_rule(&mut rules, "HLT-008-FALSE-GREEN-RISK");
+            push_rule(&mut rules, "HLT-024-AGENT-TOOL-SUPPLY-GAP");
+        }
+        "fast" => {
+            push_rule(&mut rules, "HLT-003-OWNERLESS-PATH");
+            push_rule(&mut rules, "HLT-004-UNMAPPED-PROOF");
+            push_rule(&mut rules, "HLT-008-FALSE-GREEN-RISK");
+        }
+        "audit" => {
+            push_rule(&mut rules, "HLT-003-OWNERLESS-PATH");
+            push_rule(&mut rules, "HLT-004-UNMAPPED-PROOF");
+            push_rule(&mut rules, "HLT-008-FALSE-GREEN-RISK");
+            push_rule(&mut rules, "HLT-024-AGENT-TOOL-SUPPLY-GAP");
         }
         "contract" => {
             push_rule(&mut rules, "HLT-002-GENERATED-MUTATION");
@@ -1343,6 +1376,7 @@ fn rules_covered_for_run(run: &PlannedRun) -> Vec<RuleCoverage> {
             push_rule(&mut rules, "HLT-012-OVERBROAD-AGENCY");
             push_rule(&mut rules, "HLT-016-SUPPLY-CHAIN-DRIFT");
             push_rule(&mut rules, "HLT-020-CI-HARDENING-GAP");
+            push_rule(&mut rules, "HLT-024-AGENT-TOOL-SUPPLY-GAP");
         }
         "observability" => {
             push_rule(&mut rules, "HLT-017-OPAQUE-OBSERVABILITY");
