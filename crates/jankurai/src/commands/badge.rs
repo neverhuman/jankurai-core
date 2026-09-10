@@ -304,18 +304,12 @@ fn load_score_input(repo: &Path, score_path: &str) -> Result<ScoreInput> {
 
     let decision_value = value.get("decision");
     let decision_minimum = decision_value.and_then(|d| get_i32(d, "minimum_score"));
-    let minimum_score = decision_minimum.or(policy_minimum);
+    let minimum_score = decision_minimum.zip(policy_minimum).map(|(d, p)| d.max(p));
 
     let status = decision_value
         .and_then(|d| d.get("status"))
         .and_then(Value::as_str)
-        .unwrap_or_else(|| {
-            if Some(score) >= minimum_score {
-                "pass"
-            } else {
-                "fail"
-            }
-        });
+        .unwrap_or("unknown");
 
     let explicit_passed = decision_value
         .and_then(|d| d.get("passed"))
@@ -324,8 +318,8 @@ fn load_score_input(repo: &Path, score_path: &str) -> Result<ScoreInput> {
     let findings = value
         .get("findings")
         .and_then(Value::as_array)
-        .map(Vec::len)
-        .unwrap_or(0);
+        .ok_or_else(|| anyhow::anyhow!("{} is missing its findings array", abs.display()))?
+        .len();
 
     let hard_findings_from_decision = decision_value
         .and_then(|d| d.get("hard_findings"))
@@ -337,21 +331,47 @@ fn load_score_input(repo: &Path, score_path: &str) -> Result<ScoreInput> {
         .and_then(Value::as_u64)
         .map(|n| n as usize);
 
-    let hard_findings = hard_findings_from_decision.unwrap_or_else(|| count_hard_findings(&value));
+    let hard_findings = hard_findings_from_decision
+        .unwrap_or(0)
+        .max(count_hard_findings(&value));
     let soft_findings =
         soft_findings_from_decision.unwrap_or_else(|| findings.saturating_sub(hard_findings));
 
-    let passed = explicit_passed.unwrap_or_else(|| {
-        let min_ok = minimum_score.map(|m| score >= m).unwrap_or(true);
-        min_ok && hard_findings == 0 && status != "fail"
-    });
+    let passed = explicit_passed == Some(true)
+        && hard_findings_from_decision == Some(0)
+        && hard_findings == 0
+        && minimum_score.is_some_and(|minimum| (0..=100).contains(&minimum) && score >= minimum)
+        && (0..=100).contains(&score)
+        && decision_minimum
+            .zip(policy_minimum)
+            .is_some_and(|(d, p)| d >= p)
+        && matches!(status, "pass" | "advisory");
     let dirty = value
         .get("dirty_worktree")
         .and_then(Value::as_bool)
         .unwrap_or(true);
-    if dirty {
+    let git = value.get("git");
+    let scope = value.get("scope");
+    if dirty
+        || git
+            .and_then(|g| g.get("dirty_worktree"))
+            .and_then(Value::as_bool)
+            != Some(false)
+    {
         bail!(
             "{} cannot source a public badge from a dirty report",
+            abs.display()
+        );
+    }
+    if git.and_then(|g| g.get("mode")).and_then(Value::as_str) != Some("full")
+        || scope.and_then(|s| s.get("mode")).and_then(Value::as_str) != Some("full")
+        || !scope
+            .and_then(|s| s.get("paths"))
+            .and_then(Value::as_array)
+            .is_some_and(Vec::is_empty)
+    {
+        bail!(
+            "{} cannot source a public badge from a partial report",
             abs.display()
         );
     }
@@ -443,7 +463,7 @@ fn load_score_input(repo: &Path, score_path: &str) -> Result<ScoreInput> {
 }
 
 fn get_i32(value: &Value, key: &str) -> Option<i32> {
-    value.get(key)?.as_i64().map(|n| n as i32)
+    i32::try_from(value.get(key)?.as_i64()?).ok()
 }
 
 fn count_hard_findings(value: &Value) -> usize {
@@ -453,6 +473,9 @@ fn count_hard_findings(value: &Value) -> usize {
         .into_iter()
         .flatten()
         .filter(|finding| {
+            if let Some(hardness) = finding.get("hardness").and_then(Value::as_str) {
+                return hardness != "soft";
+            }
             finding
                 .get("severity")
                 .and_then(Value::as_str)

@@ -714,7 +714,7 @@ dependencies = [
 [[package]]
 name = "jankurai-audit-analyzers"
 version = "0.1.0"
-source = "git+https://github.com/neverhuman/jankurai-tools-analyzers.git?tag=jankurai-tools-analyzers-v1.7.0-split.3#f511019045d83023ca0af83b81a2f0bc018405e7"
+source = "git+https://github.com/neverhuman/jankurai-tools-analyzers.git?tag=ci-5744da4bb06434fdffecb8c5ec6f1091ff26b460#5744da4bb06434fdffecb8c5ec6f1091ff26b460"
 dependencies = [
  "anyhow",
  "globset",
@@ -736,7 +736,7 @@ dependencies = [
 [[package]]
 name = "jankurai-audit-dedup"
 version = "0.1.0"
-source = "git+https://github.com/neverhuman/jankurai-tools-dedup.git?tag=jankurai-tools-dedup-v1.7.0-split.2#06186a1166a1df03d8bd460c34502bb9eb907eb8"
+source = "git+https://www.github.com/neverhuman/jankurai-tools-dedup.git?rev=602b608c59690020eb66a2069f67d33a75b481f1#602b608c59690020eb66a2069f67d33a75b481f1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -751,7 +751,7 @@ dependencies = [
 [[package]]
 name = "jankurai-audit-kernel"
 version = "0.1.0"
-source = "git+https://www.github.com/neverhuman/jankurai-tools-kernel.git?rev=ecbcbbc6a3bc76e755a2015190d124758029f4ba#ecbcbbc6a3bc76e755a2015190d124758029f4ba"
+source = "git+https://www.github.com/neverhuman/jankurai-tools-kernel.git?rev=55401b34cd39c4f22755f130986d2a5869a5b3d7#55401b34cd39c4f22755f130986d2a5869a5b3d7"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -775,7 +775,7 @@ dependencies = [
 [[package]]
 name = "jankurai-fleet"
 version = "0.1.0"
-source = "git+https://github.com/neverhuman/jankurai-tools-fleet.git?tag=jankurai-tools-fleet-v1.7.0-split.2#984c509f0172fdc14aeee27208074cfd17b7f487"
+source = "git+https://github.com/neverhuman/jankurai-tools-fleet.git?tag=ci-668532cd06f87aec6b677ab061405e51871e57b8#668532cd06f87aec6b677ab061405e51871e57b8"
 dependencies = [
  "anyhow",
  "jankurai-audit-kernel",
@@ -788,7 +788,7 @@ dependencies = [
 [[package]]
 name = "jankurai-guard"
 version = "0.1.0"
-source = "git+https://github.com/neverhuman/jankurai-tools-guard.git?tag=jankurai-tools-guard-v1.7.0-split.1#bf2c7e3f768234aa3603fa77986a70e95a1cb9b0"
+source = "git+https://github.com/neverhuman/jankurai-tools-guard.git?tag=ci-ac11dec26907b986c62b1112fc6e781e1e2894c3#ac11dec26907b986c62b1112fc6e781e1e2894c3"
 dependencies = [
  "anyhow",
  "chrono",
@@ -809,7 +809,7 @@ dependencies = [
 [[package]]
 name = "jankurai-proofbind"
 version = "0.8.0"
-source = "git+https://github.com/neverhuman/jankurai-tools-proof.git?tag=jankurai-tools-proof-v1.7.0-split.0#de90586b48fbeafd1e3de8dd8d01e3cc348cda7f"
+source = "git+https://github.com/neverhuman/jankurai-tools-proof.git?tag=ci-dc7a6ffd84866a1572eaeab4c11e4f02028c5176#dc7a6ffd84866a1572eaeab4c11e4f02028c5176"
 dependencies = [
  "anyhow",
  "serde",
@@ -820,7 +820,7 @@ dependencies = [
 [[package]]
 name = "jankurai-proofmark"
 version = "0.8.0"
-source = "git+https://github.com/neverhuman/jankurai-tools-proof.git?tag=jankurai-tools-proof-v1.7.0-split.0#de90586b48fbeafd1e3de8dd8d01e3cc348cda7f"
+source = "git+https://github.com/neverhuman/jankurai-tools-proof.git?tag=ci-dc7a6ffd84866a1572eaeab4c11e4f02028c5176#dc7a6ffd84866a1572eaeab4c11e4f02028c5176"
 dependencies = [
  "anyhow",
  "jankurai-proofbind",

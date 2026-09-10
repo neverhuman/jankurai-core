@@ -16,6 +16,8 @@ fn write_cargo_fixture(root: &Path, source: &str) {
 name = "fixture-rust"
 version = "0.1.0"
 edition = "2021"
+
+[workspace]
 "#,
     )
     .unwrap();
