@@ -39,9 +39,20 @@ for (const [name, value] of [
   ['wrong name complete-quality-gates', JSON.stringify({ 'complete-quality-gates': success })],
   ['extra job', JSON.stringify({ ...successfulJobs, extra: success })],
   ['successful array', JSON.stringify([success])],
+  ['duplicate job', '{"quality":{"result":"failure"},"quality":{"result":"success"}}'],
+  ['duplicate result', '{"quality":{"result":"failure","result":"success"}}'],
+  ['escaped duplicate job', '{"quality":{"result":"failure"},"qu\\u0061lity":{"result":"success"}}'],
+  ['escaped duplicate result', '{"quality":{"result":"failure","r\\u0065sult":"success"}}'],
 ]) {
   test(`required aggregate rejects ${name}`, () => assert.equal(aggregate(value), false));
 }
+
+test('quoted punctuation and independent nested keys are valid payload data', () => {
+  assert.equal(aggregate(JSON.stringify({quality: {result: 'success', outputs: {
+    quoted: '\"result\":\"failure\",{[}', records: '[{"same":1},{"same":2}]',
+    nested: [{same: 1}, {same: 2}],
+  }}})), true);
+});
 
 for (const lane of lanes) {
   test(`required aggregate rejects missing ${lane}`, () => {

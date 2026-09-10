@@ -14,6 +14,26 @@ try {
 } catch (err) {
   throw new Error(`NEEDS_JSON must be valid JSON: ${err.message}`);
 }
+// JSON.parse discards earlier duplicate keys. Walk the already-valid token
+// stream so a later success cannot overwrite an earlier failure, including
+// escaped spellings of the same key and duplicate nested result fields.
+const scopes = [];
+for (const token of raw.match(/"(?:\\[\s\S]|[^"\\])*"|[{}\[\],:]/g) ?? []) {
+  if (token === '{' || token === '[') {
+    scopes.push({ object: token === '{', key: token === '{', seen: new Set() });
+  } else if (token === '}' || token === ']') {
+    scopes.pop();
+  } else {
+    const scope = scopes.at(-1);
+    if (token === ',' && scope?.object) scope.key = true;
+    if (token.startsWith('"') && scope?.object && scope.key) {
+      const key = JSON.parse(token);
+      if (scope.seen.has(key)) throw new Error(`duplicate JSON key: ${key}`);
+      scope.seen.add(key);
+      scope.key = false;
+    }
+  }
+}
 if (jobs === null || typeof jobs !== 'object' || Array.isArray(jobs)) {
   throw new Error('NEEDS_JSON must be a single plain object');
 }
