@@ -871,7 +871,7 @@ dependencies = [
 [[package]]
 name = "jankurai-audit-kernel"
 version = "0.1.0"
-source = "git+https://www.github.com/neverhuman/jankurai-tools-kernel.git?rev=55401b34cd39c4f22755f130986d2a5869a5b3d7#55401b34cd39c4f22755f130986d2a5869a5b3d7"
+source = "git+https://www.github.com/neverhuman/jankurai-tools-kernel.git?rev=a9dfb86457267a76e30e78c96263ade80c0d3c95#a9dfb86457267a76e30e78c96263ade80c0d3c95"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -929,7 +929,7 @@ dependencies = [
 [[package]]
 name = "jankurai-proofbind"
 version = "0.8.0"
-source = "git+https://github.com/neverhuman/jankurai-tools-proof.git?tag=ci-dc7a6ffd84866a1572eaeab4c11e4f02028c5176#dc7a6ffd84866a1572eaeab4c11e4f02028c5176"
+source = "git+https://github.com/neverhuman/jankurai-tools-proof.git?tag=ci-6a4e0030294aeb14897f317b257a70ffbca3049d#6a4e0030294aeb14897f317b257a70ffbca3049d"
 dependencies = [
  "anyhow",
  "serde",
@@ -940,7 +940,7 @@ dependencies = [
 [[package]]
 name = "jankurai-proofmark"
 version = "0.8.0"
-source = "git+https://github.com/neverhuman/jankurai-tools-proof.git?tag=ci-dc7a6ffd84866a1572eaeab4c11e4f02028c5176#dc7a6ffd84866a1572eaeab4c11e4f02028c5176"
+source = "git+https://github.com/neverhuman/jankurai-tools-proof.git?tag=ci-6a4e0030294aeb14897f317b257a70ffbca3049d#6a4e0030294aeb14897f317b257a70ffbca3049d"
 dependencies = [
  "anyhow",
  "jankurai-proofbind",
