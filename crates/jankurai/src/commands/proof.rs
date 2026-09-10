@@ -1220,7 +1220,7 @@ fn execute_run(
             path: display_relative(repo, &log_file),
             sha256: log_sha256,
         }],
-        rules_covered: rules_covered_for_run(repo, run),
+        rules_covered: rules_covered_for_run(run),
         retryable,
         stdout_stderr_bytes,
         extensions: serde_json::Map::new(),
@@ -1314,42 +1314,12 @@ fn insert_changed_path(paths: &mut BTreeSet<String>, rel: String, original: &Pat
     Ok(())
 }
 
-fn rules_covered_for_run(repo: &Path, run: &PlannedRun) -> Vec<RuleCoverage> {
+fn rules_covered_for_run(run: &PlannedRun) -> Vec<RuleCoverage> {
     let mut rules = Vec::new();
-    // Prefer the target repo's agent/proof-lanes.toml declaration for this lane.
-    if let Ok(catalog) = RepoCatalog::load(repo) {
-        if let Some(lane) = catalog
-            .proof_lanes
-            .iter()
-            .find(|lane| lane.name == run.lane)
-        {
-            if !lane.rules_covered.is_empty() {
-                for rule_id in &lane.rules_covered {
-                    push_rule(&mut rules, rule_id);
-                }
-                return rules;
-            }
-        }
-    }
     match run.lane.as_str() {
-        // Component required lanes (docs/CI maps) must emit HLT-008/HLT-024 so
-        // proofbind can bind real receipts; empty coverage left 42 obligations missing.
-        "required" => {
+        "fast" | "audit" => {
             push_rule(&mut rules, "HLT-003-OWNERLESS-PATH");
             push_rule(&mut rules, "HLT-004-UNMAPPED-PROOF");
-            push_rule(&mut rules, "HLT-008-FALSE-GREEN-RISK");
-            push_rule(&mut rules, "HLT-024-AGENT-TOOL-SUPPLY-GAP");
-        }
-        "fast" => {
-            push_rule(&mut rules, "HLT-003-OWNERLESS-PATH");
-            push_rule(&mut rules, "HLT-004-UNMAPPED-PROOF");
-            push_rule(&mut rules, "HLT-008-FALSE-GREEN-RISK");
-        }
-        "audit" => {
-            push_rule(&mut rules, "HLT-003-OWNERLESS-PATH");
-            push_rule(&mut rules, "HLT-004-UNMAPPED-PROOF");
-            push_rule(&mut rules, "HLT-008-FALSE-GREEN-RISK");
-            push_rule(&mut rules, "HLT-024-AGENT-TOOL-SUPPLY-GAP");
         }
         "contract" => {
             push_rule(&mut rules, "HLT-002-GENERATED-MUTATION");
@@ -1373,7 +1343,6 @@ fn rules_covered_for_run(repo: &Path, run: &PlannedRun) -> Vec<RuleCoverage> {
             push_rule(&mut rules, "HLT-012-OVERBROAD-AGENCY");
             push_rule(&mut rules, "HLT-016-SUPPLY-CHAIN-DRIFT");
             push_rule(&mut rules, "HLT-020-CI-HARDENING-GAP");
-            push_rule(&mut rules, "HLT-024-AGENT-TOOL-SUPPLY-GAP");
         }
         "observability" => {
             push_rule(&mut rules, "HLT-017-OPAQUE-OBSERVABILITY");
