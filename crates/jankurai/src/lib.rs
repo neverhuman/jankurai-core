@@ -7,6 +7,7 @@ pub mod model;
 pub mod render;
 pub mod report;
 pub mod score_history;
+mod strict_json;
 pub mod ui;
 pub mod validation;
 pub mod versions;

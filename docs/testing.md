@@ -25,6 +25,11 @@ accepted only when the unchanged source, recorded effective settings, and
 auditor version all match the current run. Missing or different settings fail
 the ratchet. Accepting a replacement baseline needs fresh qualification and
 must preserve the accepted score floor and findings.
+Baseline comparison requires a nonempty regular JSON file no larger than 64 MiB,
+unique object keys, scores within 0–100, valid SHA-256 identities, and well-formed
+caps and finding severities. Malformed comparison inputs fail before prior
+reports are replaced. These checks establish input consistency; imported
+baselines do not acquire supervised-execution authority.
 Repository version declarations cannot change the report's auditor or schema
 identity.
 
