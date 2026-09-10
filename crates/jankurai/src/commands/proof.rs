@@ -286,7 +286,6 @@ fn execute_proof_plan(args: ProveArgs, plan: ProofPlan, plan_path_str: String) -
     };
 
     ensure_planned_commands_allowed(&args.repo, &runs, args.allow_unsigned_commands)?;
-    let catalog = RepoCatalog::load(&args.repo).ok();
 
     let mut receipts = Vec::new();
     let mut receipt_paths = Vec::new();
@@ -311,7 +310,6 @@ fn execute_proof_plan(args: ProveArgs, plan: ProofPlan, plan_path_str: String) -
             run,
             plan_path_str.as_str(),
             plan_digest.as_str(),
-            catalog.as_ref(),
         )?;
         let receipt_name = receipt_file_name(index, &run.lane, &run.command);
         let receipt_path = receipt_dir.join(receipt_name);
@@ -1150,7 +1148,6 @@ fn execute_run(
     run: &PlannedRun,
     plan_path: &str,
     plan_digest: &str,
-    catalog: Option<&RepoCatalog>,
 ) -> Result<ProofReceipt> {
     let started = Instant::now();
     let started_secs = SystemTime::now()
@@ -1223,7 +1220,7 @@ fn execute_run(
             path: display_relative(repo, &log_file),
             sha256: log_sha256,
         }],
-        rules_covered: rules_covered_for_run(run, catalog),
+        rules_covered: rules_covered_for_run(repo, run),
         retryable,
         stdout_stderr_bytes,
         extensions: serde_json::Map::new(),
@@ -1317,10 +1314,10 @@ fn insert_changed_path(paths: &mut BTreeSet<String>, rel: String, original: &Pat
     Ok(())
 }
 
-fn rules_covered_for_run(run: &PlannedRun, catalog: Option<&RepoCatalog>) -> Vec<RuleCoverage> {
+fn rules_covered_for_run(repo: &Path, run: &PlannedRun) -> Vec<RuleCoverage> {
     let mut rules = Vec::new();
     // Prefer the target repo's agent/proof-lanes.toml declaration for this lane.
-    if let Some(catalog) = catalog {
+    if let Ok(catalog) = RepoCatalog::load(repo) {
         if let Some(lane) = catalog
             .proof_lanes
             .iter()
