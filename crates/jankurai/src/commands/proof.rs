@@ -1156,8 +1156,8 @@ fn execute_run(
         .as_secs();
     let run_id = proof_run_id(plan_path, index, &run.lane, &run.command, started_secs);
     let started_at = now_string();
-    let command_output = Command::new("bash")
-        .arg("-lc")
+    let command_output = super::shell::bash()
+        .arg("-c")
         .arg(&run.command)
         .current_dir(repo)
         .output()

@@ -19,11 +19,11 @@ pub struct ProofMarkRustArgs {
     pub md: String,
 }
 
-pub fn run_rust(args: ProofMarkRustArgs) -> Result<()> {
-    let mode = args
-        .mode
-        .parse::<ProofMarkMode>()
-        .unwrap_or(ProofMarkMode::Advisory);
+pub fn run_rust(mut args: ProofMarkRustArgs) -> Result<()> {
+    let mode = args.mode.parse::<ProofMarkMode>()?;
+    if let Some(base) = args.changed_from.as_deref() {
+        args.changed_from = Some(crate::audit::verified_git_comparison(&args.repo, base)?.0);
+    }
     let output = build_proofmark(ProofMarkRequest {
         repo_root: args.repo.clone(),
         changed_paths: args.changed,

@@ -45,11 +45,11 @@ pub fn run_verify(args: ProofBindVerifyArgs) -> Result<()> {
     })
 }
 
-fn write_outputs(args: ProofBindMapArgs) -> Result<()> {
-    let mode = args
-        .mode
-        .parse::<ProofBindMode>()
-        .unwrap_or(ProofBindMode::Advisory);
+fn write_outputs(mut args: ProofBindMapArgs) -> Result<()> {
+    let mode = args.mode.parse::<ProofBindMode>()?;
+    if let Some(base) = args.changed_from.as_deref() {
+        args.changed_from = Some(crate::audit::verified_git_comparison(&args.repo, base)?.0);
+    }
     let output = build_proofbind(ProofBindRequest {
         repo_root: args.repo.clone(),
         changed_paths: args.changed,

@@ -118,6 +118,8 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      RUSTUP_TOOLCHAIN: 1.97.1
     permissions:
       contents: read
       security-events: write
@@ -126,7 +128,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Install Rust toolchain
-        run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
+        run: rustup toolchain install 1.97.1 --profile minimal --component rustfmt,clippy
       - name: Prepare accepted baseline
         run: |
           set -euo pipefail

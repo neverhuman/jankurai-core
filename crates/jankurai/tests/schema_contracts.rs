@@ -344,6 +344,7 @@ fn cell_registry_and_manifest_schemas_parse() {
         proofbind_witness["properties"]["surfaces"]["items"]["properties"]["surface_type"]["enum"],
         serde_json::json!([
             "rust_public_api",
+            "test_execution",
             "authz_boundary",
             "input_boundary",
             "sql_query",

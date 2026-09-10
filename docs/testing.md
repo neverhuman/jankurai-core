@@ -2,6 +2,44 @@
 
 Testing is routed proof. Agents should not guess which tests matter.
 
+## Audit decisions and inputs
+
+`audit --mode advisory` exits successfully after a complete analysis even when
+the repository fails policy. Its report retains `decision.passed = false` for
+that failure, uses `decision.status = "advisory"`, and claims only HL1. Consumers
+must check the decision and findings before accepting the report. Standard,
+ratchet, and release modes enforce the final decision and conformance blockers.
+
+`--fail-under` can raise the repository score floor. `--fail-on` adds blocking
+severities to the repository policy. Neither option weakens existing settings.
+`--policy` must identify the audited repository's `agent/audit-policy.toml`,
+because every scanner consumes that source. Missing optional policy files use
+the documented defaults; malformed, unreadable, and linked control inputs fail
+analysis. An explicitly requested receipt file or directory must exist, be
+readable, and contain valid receipts. Input errors preserve prior report files.
+
+Policy fingerprints bind the source policy, effective score and severity
+settings, and producer versions. Advisory and ratchet modes share that identity
+when their effective settings match. A historical source-only fingerprint is
+accepted only when the unchanged source, recorded effective settings, and
+auditor version all match the current run. Missing or different settings fail
+the ratchet. Accepting a replacement baseline needs fresh qualification and
+must preserve the accepted score floor and findings.
+Baseline comparison requires a nonempty regular JSON file no larger than 64 MiB,
+unique object keys, scores within 0–100, valid SHA-256 identities, and well-formed
+caps and finding severities. Malformed comparison inputs fail before prior
+reports are replaced. These checks establish input consistency; imported
+baselines do not acquire supervised-execution authority.
+Repository version declarations cannot change the report's auditor or schema
+identity.
+
+Enforcing audits scan the requested source without authorizing success from a
+cached smart-scan result. `--changed-fast` produces advisory scope and cannot be
+used for ratchet or release qualification. Imported proof receipts and evidence
+remain available for historical diagnostics. Ordinary audit does not execute
+their commands, and serialized success cannot authorize release. The public
+supervised execution command remains a release prerequisite.
+
 | Lane | Purpose |
 | --- | --- |
 | `fast` | deterministic local proof for most edits |

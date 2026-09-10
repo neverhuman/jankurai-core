@@ -49,6 +49,7 @@
             "type": "string",
             "enum": [
               "rust_public_api",
+              "test_execution",
               "authz_boundary",
               "input_boundary",
               "sql_query",

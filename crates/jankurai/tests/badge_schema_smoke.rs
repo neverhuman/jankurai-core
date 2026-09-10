@@ -42,6 +42,7 @@ fn badge_command_emits_readme_schema_valid_json() {
     report_value["score"] = serde_json::json!(100);
     report_value["raw_score"] = serde_json::json!(100);
     report_value["dirty_worktree"] = serde_json::json!(false);
+    report_value["git"]["dirty_worktree"] = serde_json::json!(false);
     report_value["findings"] = serde_json::json!([]);
     report_value["caps_applied"] = serde_json::json!([]);
     report_value["decision"]["status"] = serde_json::json!("pass");
@@ -105,6 +106,7 @@ fn badge_command_accepts_clean_advisory_pass() {
     report_value["score"] = serde_json::json!(88);
     report_value["raw_score"] = serde_json::json!(88);
     report_value["dirty_worktree"] = serde_json::json!(false);
+    report_value["git"]["dirty_worktree"] = serde_json::json!(false);
     report_value["findings"] = serde_json::json!([]);
     report_value["caps_applied"] = serde_json::json!([]);
     report_value["decision"]["status"] = serde_json::json!("advisory");

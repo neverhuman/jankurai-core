@@ -27,13 +27,14 @@ install -m 0644 agent/baselines/main.repo-score.json \
 
 # proofbind: changed-surface proof obligation routing.
 log "tool-adoption: proofbind verify"
-target/debug/jankurai proofbind verify . --changed-from origin/main
+comparison_base="$(bash ops/ci/comparison-base.sh)"
+target/debug/jankurai proofbind verify . --changed-from "$comparison_base"
 # Adopted artifacts: target/jankurai/proofbind/surface-witness.json
 # target/jankurai/proofbind/obligations.json
 
 # proofmark-rust: in-diff mutation and coverage witness for Rust.
 log "tool-adoption: proofmark rust"
-target/debug/jankurai proofmark rust . --obligations target/jankurai/proofbind/obligations.json
+target/debug/jankurai proofmark rust . --changed-from "$comparison_base" --obligations target/jankurai/proofbind/obligations.json
 # Adopted artifacts: target/jankurai/proofmark/proofmark-receipt.json
 # target/jankurai/proofmark/proof-receipt.json
 

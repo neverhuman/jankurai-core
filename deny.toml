@@ -1,0 +1,20 @@
+[advisories]
+unmaintained = "workspace"
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+required-git-spec = "tag"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = [
+  "https://github.com/neverhuman/jankurai-tools-analyzers",
+  "https://github.com/neverhuman/jankurai-tools-fleet",
+  "https://github.com/neverhuman/jankurai-tools-guard",
+  "https://github.com/neverhuman/jankurai-tools-proof",
+  "https://www.github.com/neverhuman/jankurai-tools-kernel",
+  "https://www.github.com/neverhuman/jankurai-tools-dedup",
+]

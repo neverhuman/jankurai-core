@@ -2,26 +2,38 @@ use crate::model::{Report, ReportRatchet};
 use anyhow::{bail, Context, Result};
 use serde_json::Value;
 use std::collections::BTreeSet;
+use std::io::Read;
 use std::path::Path;
 
+const MAX_BASELINE_BYTES: u64 = 64 * 1024 * 1024;
+
 pub fn compare_report_to_baseline(report: &Report, baseline_path: &Path) -> Result<ReportRatchet> {
-    let text = std::fs::read_to_string(baseline_path)
+    let metadata = std::fs::symlink_metadata(baseline_path)
         .with_context(|| format!("read ratchet baseline {}", baseline_path.display()))?;
-    let baseline: Value = serde_json::from_str(&text)
+    if !metadata.is_file() || metadata.len() == 0 || metadata.len() > MAX_BASELINE_BYTES {
+        bail!("ratchet baseline must be a nonempty regular file no larger than 64 MiB");
+    }
+    let mut bytes = Vec::new();
+    std::fs::File::open(baseline_path)?
+        .take(MAX_BASELINE_BYTES + 1)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() as u64 != metadata.len() {
+        bail!("ratchet baseline changed size while being read");
+    }
+    let baseline = crate::strict_json::from_slice(&bytes)
         .with_context(|| format!("parse ratchet baseline {}", baseline_path.display()))?;
 
     let baseline_score = required_i32(&baseline, "score")?;
-    let baseline_report_fingerprint = required_string(&baseline, "report_fingerprint")?;
-    let baseline_input_fingerprint = required_string(&baseline, "input_fingerprint")?;
-    let baseline_policy_fingerprint = required_string(&baseline, "policy_fingerprint")?;
+    if !(0..=100).contains(&baseline_score) || !(0..=100).contains(&report.score) {
+        bail!("ratchet scores must be integers from 0 through 100");
+    }
+    let baseline_report_fingerprint = required_fingerprint(&baseline, "report_fingerprint")?;
+    let baseline_input_fingerprint = required_fingerprint(&baseline, "input_fingerprint")?;
+    let baseline_policy_fingerprint = required_fingerprint(&baseline, "policy_fingerprint")?;
     let baseline_schema_version = required_string(&baseline, "schema_version")?;
     let baseline_standard_version = required_string(&baseline, "standard_version")?;
     let baseline_caps = required_string_set(&baseline, "caps_applied")?;
     let baseline_findings = required_hard_finding_fingerprints(&baseline)?;
-
-    if baseline.get("findings").and_then(Value::as_array).is_none() {
-        bail!("ratchet baseline missing required array `findings`");
-    }
 
     let current_caps = report.caps_applied.iter().cloned().collect::<BTreeSet<_>>();
     let current_findings = report
@@ -39,7 +51,8 @@ pub fn compare_report_to_baseline(report: &Report, baseline_path: &Path) -> Resu
         .difference(&baseline_findings)
         .cloned()
         .collect::<Vec<_>>();
-    let policy_changed = baseline_policy_fingerprint != report.policy_fingerprint;
+    let policy_changed = baseline_policy_fingerprint != report.policy_fingerprint
+        && !super::outcome::matches_legacy_policy(report, &baseline)?;
     let version_compatible = baseline_schema_version == report.schema_version
         && baseline_standard_version == report.standard_version;
     let score_delta = report.score - baseline_score;
@@ -89,6 +102,9 @@ fn required_string_set(value: &Value, field: &str) -> Result<BTreeSet<String>> {
         let Some(text) = item.as_str() else {
             bail!("ratchet baseline `{field}` must contain only strings");
         };
+        if text.trim().is_empty() {
+            bail!("ratchet baseline `{field}` contains an empty string");
+        }
         out.insert(text.to_string());
     }
     Ok(out)
@@ -100,14 +116,36 @@ fn required_hard_finding_fingerprints(value: &Value) -> Result<BTreeSet<String>>
     };
     let mut out = BTreeSet::new();
     for item in items {
-        let severity = item.get("severity").and_then(Value::as_str).unwrap_or("");
-        if !matches!(severity, "critical" | "high") {
+        let severity = required_string(item, "severity")?;
+        if !matches!(
+            severity.as_str(),
+            "critical" | "high" | "medium" | "low" | "info"
+        ) {
+            bail!("ratchet baseline contains an invalid finding severity");
+        }
+        if let Some(hardness) = item.get("hardness") {
+            if !matches!(hardness.as_str(), Some("hard" | "soft")) {
+                bail!("ratchet baseline contains an invalid finding hardness");
+            }
+        }
+        if !matches!(severity.as_str(), "critical" | "high") {
             continue;
         }
-        let Some(fingerprint) = item.get("fingerprint").and_then(Value::as_str) else {
-            bail!("ratchet baseline hard finding missing required string `fingerprint`");
-        };
-        out.insert(fingerprint.to_string());
+        out.insert(required_fingerprint(item, "fingerprint")?);
     }
     Ok(out)
+}
+
+fn required_fingerprint(value: &Value, field: &str) -> Result<String> {
+    let fingerprint = required_string(value, field)?;
+    let valid = fingerprint.strip_prefix("sha256:").is_some_and(|digest| {
+        digest.len() == 64
+            && digest
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    });
+    if !valid {
+        bail!("ratchet baseline `{field}` must be a lowercase SHA-256 fingerprint");
+    }
+    Ok(fingerprint)
 }

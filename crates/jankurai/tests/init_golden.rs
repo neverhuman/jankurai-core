@@ -300,6 +300,8 @@ fn init_level_ci_adds_observe_workflow_and_preserves_existing_workflow() {
     init::run(apply).unwrap();
     let workflow = fs::read_to_string(dir.path().join(".github/workflows/jankurai.yml")).unwrap();
     assert!(workflow.contains("jankurai audit . --mode advisory"));
+    assert!(workflow.contains("toolchain: 1.97.1"));
+    assert!(workflow.contains("persist-credentials: false"));
     assert!(!workflow.contains("Enforce score floor"));
 
     let existing_dir = tempdir().unwrap();
