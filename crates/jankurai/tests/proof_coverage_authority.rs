@@ -79,9 +79,49 @@ fn arbitrary_commands_and_repository_declarations_cannot_mint_coverage() {
             );
             if lane == "required" && command == "true" {
                 imported_claims_fail_even_with_matching_digests(repo.path(), &receipts[0]);
+                missing_or_duplicate_receipts_cannot_verify(repo.path());
             }
         }
     }
+}
+
+fn missing_or_duplicate_receipts_cannot_verify(repo: &Path) {
+    let path = repo.join("target/jankurai/evidence-index.json");
+    let original = fs::read(&path).unwrap();
+    for duplicate in [false, true] {
+        let mut evidence: Value = serde_json::from_slice(&original).unwrap();
+        let receipts = evidence["receipts"].as_array_mut().unwrap();
+        if duplicate {
+            receipts.push(receipts[0].clone());
+        } else {
+            receipts.clear();
+            evidence["receipt_digests"] = json!([]);
+        }
+        fs::write(&path, serde_json::to_vec_pretty(&evidence).unwrap()).unwrap();
+        let result = verify(repo);
+        assert!(
+            !result.status.success(),
+            "incomplete receipt inventory accepted"
+        );
+        let report: Value =
+            serde_json::from_slice(&fs::read(repo.join("target/verification.json")).unwrap())
+                .unwrap();
+        assert_ne!(report["verdict"], "pass");
+        let diagnostic = if duplicate {
+            "duplicate receipt"
+        } else {
+            "missing required receipt"
+        };
+        assert!(
+            report["issues"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|issue| issue.as_str().unwrap().contains(diagnostic)),
+            "{report}"
+        );
+    }
+    fs::write(path, original).unwrap();
 }
 
 fn verify(repo: &Path) -> std::process::Output {

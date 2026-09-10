@@ -752,6 +752,25 @@ fn verify_proof_evidence(
     if evidence.changed_paths != plan.changed_paths {
         issues.push("evidence changed_paths do not match plan changed_paths".to_string());
     }
+    let runs = if plan.planned_runs.is_empty() {
+        fallback_runs_from_plan(&plan)
+    } else {
+        plan.planned_runs.clone()
+    };
+    let expected: BTreeSet<_> = runs.iter().map(|run| (&run.lane, &run.command)).collect();
+    if expected.is_empty() || expected.len() != runs.len() {
+        issues.push("missing unique nonempty planned run inventory".to_string());
+    }
+    if evidence.commands
+        != runs
+            .iter()
+            .map(|run| run.command.clone())
+            .collect::<Vec<_>>()
+    {
+        issues.push("evidence command inventory mismatch".to_string());
+    }
+    let mut observed = BTreeSet::new();
+    let mut receipt_paths = BTreeSet::new();
 
     let current_manifest_fingerprints = repo_manifest_fingerprints(repo);
     push_manifest_mismatch(
@@ -800,6 +819,9 @@ fn verify_proof_evidence(
     }
 
     for receipt_rel in &evidence.receipts {
+        if !receipt_paths.insert(receipt_rel) {
+            issues.push(format!("duplicate receipt inventory entry `{receipt_rel}`"));
+        }
         let receipt_path = repo.join(receipt_rel);
         if !receipt_path.is_file() {
             issues.push(format!("missing proof receipt `{receipt_rel}`"));
@@ -811,6 +833,13 @@ fn verify_proof_evidence(
             .with_context(|| format!("parse proof receipt {}", receipt_path.display()))?;
         validation::validate_value(repo, ArtifactSchema::ProofReceipt, &receipt_json)?;
         let receipt: ProofReceipt = serde_json::from_value(receipt_json.clone())?;
+        let key = (receipt.lane.clone(), receipt.command.clone());
+        if !expected.contains(&(&key.0, &key.1)) {
+            issues.push(format!("unexpected receipt run `{}`: `{}`", key.0, key.1));
+        }
+        if !observed.insert(key) {
+            issues.push(format!("duplicate receipt run in `{receipt_rel}`"));
+        }
 
         let receipt_digest = sha256_file(&receipt_path)?;
         artifact_digests.push(ArtifactDigest {
@@ -875,6 +904,14 @@ fn verify_proof_evidence(
         }
         if receipt.plan_digest.as_deref() != Some(current_plan_digest.as_str()) {
             issues.push(format!("receipt `{receipt_rel}` plan digest mismatch"));
+        }
+    }
+
+    for (lane, command) in expected {
+        if !observed.contains(&(lane.clone(), command.clone())) {
+            issues.push(format!(
+                "missing required receipt for `{lane}`: `{command}`"
+            ));
         }
     }
 
