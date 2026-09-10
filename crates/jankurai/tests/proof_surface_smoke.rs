@@ -746,7 +746,7 @@ fn prove_changed_without_runnable_route_fails_after_writing_repairable_evidence(
 }
 
 #[test]
-fn prove_receipts_include_rules_for_named_lanes() {
+fn prove_receipts_do_not_grant_coverage_from_named_lanes() {
     let repo = tempdir().unwrap();
     seed_catalog(repo.path());
     let work = repo.path().join("target/jankurai");
@@ -808,18 +808,5 @@ fn prove_receipts_include_rules_for_named_lanes() {
     let receipt_value: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(&receipts[0]).unwrap()).unwrap();
     validation::validate_value(repo.path(), ArtifactSchema::ProofReceipt, &receipt_value).unwrap();
-    let covered = receipt_value["rules_covered"].as_array().unwrap();
-    let ids: Vec<&str> = covered
-        .iter()
-        .map(|entry| entry["rule_id"].as_str().unwrap())
-        .collect();
-
-    assert!(ids.contains(&"HLT-010-SECRET-SPRAWL"));
-    assert!(ids.contains(&"HLT-020-CI-HARDENING-GAP"));
-    for id in ids {
-        assert!(
-            jankurai::audit::rules::lookup(id).is_some(),
-            "unregistered rule id in receipt: {id}"
-        );
-    }
+    assert!(receipt_value.get("rules_covered").is_none());
 }
