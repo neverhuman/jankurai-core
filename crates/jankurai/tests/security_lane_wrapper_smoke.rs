@@ -193,3 +193,67 @@ fn ci_security_lane_scans_a_source_snapshot_without_mutating_workspace() {
         "source snapshot scanning should not delete the live workspace"
     );
 }
+
+#[test]
+fn scanner_failures_preserve_previous_sbom_and_retained_attempts() {
+    let repo = tempdir().unwrap();
+    for directory in ["tools", "bin", "target/jankurai/security"] {
+        fs::create_dir_all(repo.path().join(directory)).unwrap();
+    }
+    fs::write(repo.path().join("Cargo.toml"), "[workspace]\n").unwrap();
+    fs::write(repo.path().join("Cargo.lock"), "fixture lock input\n").unwrap();
+    fs::write(
+        repo.path().join("tools/security-lane.sh"),
+        fs::read(repo_root().join("tools/security-lane.sh")).unwrap(),
+    )
+    .unwrap();
+    // Fake executables test failure propagation and file custody only.
+    for (name, script) in [
+        ("gitleaks", "exit 0\n"),
+        ("cargo", "if [[ $1 == deny && ${FAIL_TOOL:-} == cargo-deny ]]; then exit 7; fi\n"),
+        ("syft", "[[ ${FAIL_TOOL:-} != syft ]] || exit 7\n[[ ${FAIL_TOOL:-} != missing-sbom ]] || exit 0\noutput=${!#}\nprintf '{}' > \"${output#*=}\"\n"),
+        ("grype", "printf called > grype-called\n[[ ${FAIL_TOOL:-} != grype ]] || exit 7\n"),
+    ] {
+        let path = repo.path().join("bin").join(name);
+        fs::write(&path, format!("#!/bin/bash\n{script}")).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let sbom = repo.path().join("target/jankurai/security/sbom.json");
+    fs::write(&sbom, "accepted prior SBOM").unwrap();
+    let run = |failure: &str| {
+        Command::new("/bin/bash")
+            .current_dir(repo.path())
+            .arg("tools/security-lane.sh")
+            .env(
+                "PATH",
+                format!("{}:/usr/bin:/bin", repo.path().join("bin").display()),
+            )
+            .env("FAIL_TOOL", failure)
+            .output()
+            .unwrap()
+    };
+    for failure in ["cargo-deny", "syft", "grype", "missing-sbom"] {
+        let output = run(failure);
+        assert!(!output.status.success(), "accepted {failure}");
+        assert_eq!(fs::read_to_string(&sbom).unwrap(), "accepted prior SBOM");
+    }
+    let attempts = fs::read_dir(repo.path().join("target/jankurai/security"))
+        .unwrap()
+        .map(Result::unwrap)
+        .filter(|entry| entry.file_type().unwrap().is_dir())
+        .count();
+    assert_eq!(attempts, 4, "failed scan evidence was discarded");
+    assert!(run("").status.success());
+    assert_eq!(fs::read_to_string(&sbom).unwrap(), "{}");
+    fs::remove_file(&sbom).unwrap();
+    let sentinel = repo.path().join("unknown-file");
+    fs::write(&sentinel, "preserve me").unwrap();
+    std::os::unix::fs::symlink(&sentinel, &sbom).unwrap();
+    assert!(!run("").status.success());
+    assert_eq!(fs::read_to_string(&sentinel).unwrap(), "preserve me");
+    fs::remove_file(&sbom).unwrap();
+    fs::hard_link(&sentinel, &sbom).unwrap();
+    assert!(run("").status.success());
+    assert_eq!(fs::read_to_string(&sentinel).unwrap(), "preserve me");
+    assert_eq!(fs::read_to_string(&sbom).unwrap(), "{}");
+}

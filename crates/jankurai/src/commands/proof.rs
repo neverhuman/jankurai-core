@@ -1156,28 +1156,10 @@ fn execute_run(
         .as_secs();
     let run_id = proof_run_id(plan_path, index, &run.lane, &run.command, started_secs);
     let started_at = now_string();
-    // A proof command uses the caller's selected PATH. Login profiles and Bash
-    // startup hooks must not silently replace its tools or execute extra code.
-    // This ordinary launcher does not confer supervised-execution authority.
-    let mut command = Command::new("/bin/bash");
-    command
-        .args(["--noprofile", "--norc", "-p", "-c"])
+    let command_output = super::shell::bash()
+        .arg("-c")
         .arg(&run.command)
-        .env_remove("BASH_ENV")
-        .env_remove("ENV")
-        .env_remove("SHELLOPTS")
-        .env_remove("BASHOPTS")
-        .env_remove("LD_PRELOAD")
-        .env_remove("LD_LIBRARY_PATH")
-        .env_remove("DYLD_INSERT_LIBRARIES")
-        .env_remove("DYLD_LIBRARY_PATH")
-        .current_dir(repo);
-    for (name, _) in std::env::vars_os() {
-        if name.as_encoded_bytes().starts_with(b"BASH_FUNC_") {
-            command.env_remove(name);
-        }
-    }
-    let command_output = command
+        .current_dir(repo)
         .output()
         .with_context(|| format!("run proof command `{}`", run.command))?;
     let log_file = log_dir.join(log_file_name(index, &run.lane, &run.command));

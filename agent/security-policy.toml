@@ -10,31 +10,21 @@ enabled_tools = [
   "grype"
 ]
 
-required_tools = [
-  "gitleaks"
-]
-
-advisory_tools = [
-  "cargo-audit",
-  "cargo-deny",
-  "zizmor",
-  "actionlint",
-  "syft",
-  "grype"
-]
+required_tools = ["gitleaks", "cargo-audit", "cargo-deny", "zizmor", "actionlint", "syft", "grype"]
+advisory_tools = []
 
 [severity_thresholds]
 fail_lane_on = "high"
 
 [profiles.local]
 enabled_tools = ["gitleaks", "cargo-audit", "cargo-deny", "zizmor", "actionlint", "syft", "grype"]
-required_tools = ["gitleaks"]
-advisory_tools = ["cargo-audit", "cargo-deny", "zizmor", "actionlint", "syft", "grype"]
+required_tools = ["gitleaks", "cargo-audit", "cargo-deny", "zizmor", "actionlint", "syft", "grype"]
+advisory_tools = []
 
 [profiles.ci]
 enabled_tools = ["gitleaks", "cargo-audit", "cargo-deny", "zizmor", "actionlint", "syft", "grype"]
-required_tools = ["gitleaks", "cargo-audit", "zizmor", "actionlint"]
-advisory_tools = ["cargo-deny", "syft", "grype"]
+required_tools = ["gitleaks", "cargo-audit", "cargo-deny", "zizmor", "actionlint", "syft", "grype"]
+advisory_tools = []
 
 [profiles.release]
 enabled_tools = ["gitleaks", "cargo-audit", "cargo-deny", "zizmor", "actionlint", "syft", "grype"]

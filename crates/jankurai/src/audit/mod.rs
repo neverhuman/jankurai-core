@@ -1607,20 +1607,54 @@ fn normalize_changed_path(root: &Path, path: &Path) -> Option<String> {
 }
 
 pub fn changed_paths_from_git(root: &Path, base: &str) -> Result<Vec<PathBuf>> {
-    let refspec = format!("{base}...HEAD");
+    Ok(verified_git_comparison(root, base)?.1)
+}
+
+pub(crate) fn verified_git_comparison(root: &Path, base: &str) -> Result<(String, Vec<PathBuf>)> {
+    let revision = Command::new("git")
+        .args([
+            "rev-parse",
+            "--verify",
+            "--end-of-options",
+            &format!("{base}^{{commit}}"),
+        ])
+        .current_dir(root)
+        .output()?;
+    if !revision.status.success() {
+        anyhow::bail!(
+            "cannot resolve comparison base `{base}`: {}",
+            String::from_utf8_lossy(&revision.stderr).trim()
+        );
+    }
+    let revision = String::from_utf8(revision.stdout)?.trim().to_owned();
+    let refspec = format!("{revision}...HEAD");
     let output = Command::new("git")
-        .args(["diff", "--name-only", refspec.as_str()])
+        .args([
+            "diff",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--name-only",
+            "-z",
+            refspec.as_str(),
+            "--",
+        ])
         .current_dir(root)
         .output()?;
     if !output.status.success() {
-        return Ok(vec![]);
+        anyhow::bail!(
+            "cannot compare source with `{base}`: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
     }
-    let text = String::from_utf8_lossy(&output.stdout);
-    Ok(text
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| root.join(line.trim()))
-        .collect())
+    let text = String::from_utf8(output.stdout)?;
+    if !text.is_empty() && !text.ends_with('\0') {
+        anyhow::bail!("Git returned an incomplete changed-path list");
+    }
+    let paths = text
+        .split_terminator('\0')
+        .map(|path| root.join(path))
+        .collect();
+    Ok((revision, paths))
 }
 
 fn load_proof_receipts(root: &Path, path: Option<&str>) -> Result<Vec<ProofReceipt>> {

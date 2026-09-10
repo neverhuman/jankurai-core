@@ -4,7 +4,7 @@ use serde_json::json;
 use std::{fs, os::unix::fs::PermissionsExt, process::Command};
 
 #[test]
-fn proof_preserves_selected_tools_and_ignores_shell_startup_injection() {
+fn proof_and_security_preserve_tools_and_ignore_shell_startup_injection() {
     let repo = tempfile::tempdir().unwrap();
     for directory in [
         "agent",
@@ -12,6 +12,7 @@ fn proof_preserves_selected_tools_and_ignores_shell_startup_injection() {
         "selected",
         "replacement",
         "home",
+        "tools",
         "target/jankurai",
     ] {
         fs::create_dir_all(repo.path().join(directory)).unwrap();
@@ -28,6 +29,17 @@ fn proof_preserves_selected_tools_and_ignores_shell_startup_injection() {
     )
     .unwrap();
     fs::write(repo.path().join("agent/proof-lanes.toml"), "[[lane]]\nname = \"fixture\"\ncommand = \"selected-tool\"\npurpose = \"exercise launcher boundary\"\n").unwrap();
+    // This configuration exercises launch behavior, not scanner qualification.
+    fs::write(
+        repo.path().join("agent/security-policy.toml"),
+        "schema_version = '1.0.0'\nenabled_tools = []\nrequired_tools = []\nadvisory_tools = []\n",
+    )
+    .unwrap();
+    fs::write(
+        repo.path().join("tools/security-lane.sh"),
+        "selected-tool\n",
+    )
+    .unwrap();
     for (directory, body) in [
         ("selected", "printf selected > selected-result\n"),
         (
@@ -57,42 +69,48 @@ fn proof_preserves_selected_tools_and_ignores_shell_startup_injection() {
         ),
     )
     .unwrap();
-    let output = Command::new(env!("CARGO_BIN_EXE_jankurai"))
-        .current_dir(repo.path())
-        .args(["prove", ".", "--changed", "docs/input.md"])
-        .env("HOME", repo.path().join("home"))
-        .env(
-            "PATH",
-            format!("{}:/usr/bin:/bin", repo.path().join("selected").display()),
-        )
-        .env("BASH_ENV", &startup)
-        .env("ENV", &startup)
-        .env(
-            "BASH_FUNC_selected-tool%%",
-            "() { printf forged > function-result; }",
-        )
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert_eq!(
-        fs::read_to_string(repo.path().join("selected-result")).unwrap(),
-        "selected"
-    );
-    for forbidden in [
-        "replaced-result",
-        "profile-result",
-        "startup-result",
-        "impostor-result",
-        "function-result",
+    for args in [
+        vec!["prove", ".", "--changed", "docs/input.md"],
+        vec!["security", "run", ".", "--strict"],
     ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_jankurai"))
+            .current_dir(repo.path())
+            .args(args)
+            .env("HOME", repo.path().join("home"))
+            .env(
+                "PATH",
+                format!("{}:/usr/bin:/bin", repo.path().join("selected").display()),
+            )
+            .env("BASH_ENV", &startup)
+            .env("ENV", &startup)
+            .env(
+                "BASH_FUNC_selected-tool%%",
+                "() { printf forged > function-result; }",
+            )
+            .output()
+            .unwrap();
         assert!(
-            !repo.path().join(forbidden).exists(),
-            "executed {forbidden}"
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
         );
+        assert_eq!(
+            fs::read_to_string(repo.path().join("selected-result")).unwrap(),
+            "selected"
+        );
+        for forbidden in [
+            "replaced-result",
+            "profile-result",
+            "startup-result",
+            "impostor-result",
+            "function-result",
+        ] {
+            assert!(
+                !repo.path().join(forbidden).exists(),
+                "executed {forbidden}"
+            );
+        }
+        fs::remove_file(repo.path().join("selected-result")).unwrap();
     }
     let entries: Vec<_> = fs::read_dir(repo.path().join("target/jankurai/proof-receipts"))
         .unwrap()

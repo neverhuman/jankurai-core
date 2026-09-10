@@ -43,6 +43,8 @@ pub mod rules;
 pub mod rust;
 pub mod score;
 pub mod security;
+mod security_sbom;
+mod shell;
 pub mod update;
 pub mod vibe;
 pub mod witness;

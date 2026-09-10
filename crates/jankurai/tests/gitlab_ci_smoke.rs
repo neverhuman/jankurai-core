@@ -41,6 +41,6 @@ fn split_core_uses_local_reproducible_ci_entrypoints() {
     assert!(required.contains("cargo clippy -p jankurai --all-targets --locked --offline"));
 
     let security = fs::read_to_string(root.join("tools/security-lane.sh")).unwrap();
-    assert!(security.contains("if [[ -f deny.toml ]]; then"));
-    assert!(security.contains("cargo deny check advisories bans sources"));
+    assert!(root.join("deny.toml").is_file());
+    assert!(security.contains("cargo deny --locked check advisories bans sources"));
 }

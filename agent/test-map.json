@@ -128,6 +128,10 @@
     ".": {
       "command": "bash scripts/ci-local.sh required",
       "purpose": "required local proof for jankurai-core"
+    },
+    "deny.toml": {
+      "command": "bash scripts/ci-local.sh security",
+      "purpose": "enforce the locked dependency advisory, source, and ban policy"
     }
   }
 }

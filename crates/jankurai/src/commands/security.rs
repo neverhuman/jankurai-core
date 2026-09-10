@@ -142,9 +142,8 @@ pub fn run(args: SecurityRunArgs) -> Result<()> {
     let policy = load_policy(&repo)?;
     let selected_policy = select_profile_policy(&policy, &args.profile)?;
 
-    let ts = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default();
+    let started_wall = SystemTime::now();
+    let ts = started_wall.duration_since(UNIX_EPOCH).unwrap_or_default();
     let log_name = format!(
         "security-lane-{}-{:03}.log",
         ts.as_secs(),
@@ -156,8 +155,8 @@ pub fn run(args: SecurityRunArgs) -> Result<()> {
     let shell_command = format!("bash {}", script_rel);
     let started = Instant::now();
 
-    let mut cmd = Command::new("bash");
-    cmd.arg(&script_rel).current_dir(&repo);
+    let mut cmd = super::shell::bash();
+    cmd.arg("--").arg(&script_rel).current_dir(&repo);
     if args.strict {
         cmd.env("JANKURAI_SECURITY_STRICT", "1");
     } else {
@@ -229,6 +228,31 @@ pub fn run(args: SecurityRunArgs) -> Result<()> {
     };
 
     append_missing_required_steps(&mut commands, &selected_policy);
+    if selected_policy
+        .required_tools
+        .iter()
+        .any(|tool| tool == "syft")
+    {
+        let result = super::security_sbom::validate(
+            &security_dir.join("sbom.json"),
+            started_wall,
+            SystemTime::now(),
+        );
+        commands.push(SecurityLaneStep {
+            label: "sbom-validation".into(),
+            shell_command: "jankurai: validate fresh CycloneDX 1.6".into(),
+            tool: Some("jankurai".into()),
+            status: if result.is_ok() { "ran" } else { "failed" }.into(),
+            required_by_policy: true,
+            blocking: result.is_err(),
+            exit_code: Some(i32::from(result.is_err())),
+            advisory: false,
+            stderr_excerpt: result.err().map(|error| format!("{error:#}")),
+            finding_count: None,
+            highest_severity: None,
+            normalized_decision: None,
+        });
+    }
     let blocking_commands = commands
         .iter()
         .filter(|command| command.blocking)
