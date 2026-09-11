@@ -4,6 +4,39 @@ Testing is routed proof. Agents should not guess which tests matter.
 
 ## Audit decisions and inputs
 
+Use `--read-only` when producing evidence from a source checkout that must stay
+unchanged. It suppresses automatic badge, README, history, smart-state and update
+cache writes. Report destinations must be fresh, distinct paths outside the
+repository (or one stdout destination), without `..` components; existing evidence
+is preserved on refusal.
+For example, with a new output directory outside the checkout:
+
+```sh
+report_dir="$(mktemp -d)"
+jankurai audit . --read-only --full --mode standard \
+  --json "$report_dir/repo-score.json" --md "$report_dir/repo-score.md"
+```
+
+The mode, policy floor and ratchet still govern the audit result. Required
+publishers also enforce a read-only source filesystem and validate the command
+outcome together with the report. CLI audit metadata reads disable repository
+fsmonitor execution and optional Git index writes. In ordinary write mode,
+configured badge and smart-state output errors fail the command. The focused
+process and filesystem checks are `cargo test -p jankurai --test audit_readonly`.
+
+`proofbind` and `witness` treat imported receipts as diagnostics. `witness`
+classifies the current changed source instead of trusting a cached obligation
+inventory or its `satisfied` fields. Missing trusted lane execution and semantic
+proof block its decision. Receipt summaries explicitly say `unverified-import`.
+Witness baseline comparison uses the same strict comparator as `audit`: missing
+or invalid scores fail, and score/cap/finding regressions, policy drift and
+incompatible schema or standard versions cannot pass the ratchet. An explicit
+baseline path is resolved once; a read failure cannot select another file.
+`proofmark rust` remains an importer for inspecting coverage and mutation data:
+its diagnostic counts do not establish execution proof, and `--mode required`
+fails without trusted observations. The focused regression is
+`cargo test -p jankurai --test proofbind_proofmark_smoke`.
+
 `audit --mode advisory` exits successfully after a complete analysis even when
 the repository fails policy. Its report retains `decision.passed = false` for
 that failure, uses `decision.status = "advisory"`, and claims only HL1. Consumers

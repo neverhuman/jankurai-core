@@ -51,7 +51,7 @@ fn proofbind_and_proofmark_help_surfaces_exist() {
 }
 
 #[test]
-fn proofbind_obligation_can_be_satisfied_by_proofmark_receipt() {
+fn imported_proofmark_and_edited_obligations_cannot_satisfy_current_proof() {
     let repo = tempdir().unwrap();
     seed_catalog(repo.path());
     fs::create_dir_all(repo.path().join("src")).unwrap();
@@ -117,17 +117,45 @@ fn proofbind_obligation_can_be_satisfied_by_proofmark_receipt() {
     let proof_receipt: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(&proof_receipt_path).unwrap()).unwrap();
     validation::validate_value(repo.path(), ArtifactSchema::ProofReceipt, &proof_receipt).unwrap();
+    assert!(proof_receipt["rules_covered"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        proof_receipt["extensions"]["trust_status"],
+        "unverified-import"
+    );
+    assert!(proof_receipt["extensions"].get("proofmark").is_none());
+
+    let required = Command::new(binary_path())
+        .current_dir(repo.path())
+        .args(["proofmark", "rust"])
+        .arg(repo.path())
+        .args([
+            "--changed",
+            "src/lib.rs",
+            "--coverage",
+            "coverage.lcov",
+            "--mode",
+            "required",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        !required.status.success(),
+        "authored LCOV manufactured required execution proof"
+    );
 
     let witness_out = repo.path().join("target/jankurai/merge-witness.json");
     let witness_md = repo.path().join("target/jankurai/merge-witness.md");
-    let _output = Command::new(binary_path())
+    let output = Command::new(binary_path())
         .current_dir(repo.path())
         .arg("witness")
         .arg(repo.path())
         .arg("--changed")
         .arg("src/lib.rs")
         .arg("--proof-receipts")
-        .arg(proof_receipt_path)
+        .arg(&proof_receipt_path)
         .arg("--out")
         .arg(&witness_out)
         .arg("--md")
@@ -141,7 +169,52 @@ fn proofbind_obligation_can_be_satisfied_by_proofmark_receipt() {
     let witness: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(&witness_out).unwrap()).unwrap();
     validation::validate_value(repo.path(), ArtifactSchema::MergeWitness, &witness).unwrap();
-    assert_eq!(witness["proofbind"]["missing_obligation_count"], 0);
+    assert!(!output.status.success());
+    assert_eq!(witness["proofbind"]["missing_obligation_count"], 1);
+    assert_eq!(
+        witness["available_proof_receipts"][0]["trust_status"],
+        "unverified-import"
+    );
+
+    // Neither an authored success bit nor deletion of the cached obligation
+    // inventory changes classification of the actual source.
+    for forged in [
+        serde_json::json!({"summary":{"verdict":"pass"},"obligations":[{"satisfied":true}]}),
+        serde_json::json!({"summary":{"verdict":"pass"},"obligations":[]}),
+    ] {
+        fs::write(&obligations_path, serde_json::to_vec(&forged).unwrap()).unwrap();
+        let output = Command::new(binary_path())
+            .current_dir(repo.path())
+            .arg("witness")
+            .arg(repo.path())
+            .args(["--changed", "src/lib.rs"])
+            .arg("--proof-receipts")
+            .arg(&proof_receipt_path)
+            .arg("--out")
+            .arg(&witness_out)
+            .arg("--md")
+            .arg(&witness_md)
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        let witness: serde_json::Value =
+            serde_json::from_slice(&fs::read(&witness_out).unwrap()).unwrap();
+        assert_eq!(witness["proofbind"]["missing_obligation_count"], 1);
+        assert_eq!(witness["proofbind"]["satisfied_obligation_count"], 0);
+    }
+    let output = Command::new(binary_path())
+        .current_dir(repo.path())
+        .args(["proofbind", "verify"])
+        .arg(repo.path())
+        .args(["--changed", "src/lib.rs", "--mode", "required"])
+        .arg("--proof-receipts")
+        .arg(&proof_receipt_path)
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let current: serde_json::Value =
+        serde_json::from_slice(&fs::read(obligations_path).unwrap()).unwrap();
+    assert_eq!(current["summary"]["missing"], 1);
 }
 
 #[test]

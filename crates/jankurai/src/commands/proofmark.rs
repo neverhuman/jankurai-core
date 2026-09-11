@@ -24,7 +24,7 @@ pub fn run_rust(mut args: ProofMarkRustArgs) -> Result<()> {
     if let Some(base) = args.changed_from.as_deref() {
         args.changed_from = Some(crate::audit::verified_git_comparison(&args.repo, base)?.0);
     }
-    let output = build_proofmark(ProofMarkRequest {
+    let mut output = build_proofmark(ProofMarkRequest {
         repo_root: args.repo.clone(),
         changed_paths: args.changed,
         changed_from: args.changed_from,
@@ -34,6 +34,23 @@ pub fn run_rust(mut args: ProofMarkRustArgs) -> Result<()> {
         negative_proofs: args.negative_proof,
         mode,
     })?;
+    // This command parses historical coverage and mutation files. It does not
+    // observe their producers, so its output cannot grant execution coverage.
+    output.proof_receipt.rules_covered.clear();
+    if let Some(claims) = output.proof_receipt.extensions.remove("proofmark") {
+        output
+            .proof_receipt
+            .extensions
+            .insert("unverified_proofmark".into(), claims);
+    }
+    output.proof_receipt.extensions.insert(
+        "trust_status".into(),
+        serde_json::json!("unverified-import"),
+    );
+    if mode == ProofMarkMode::Required {
+        output.proof_receipt.exit_code = 1;
+    }
+    output.markdown.insert_str(0, "> Imported coverage and mutation data: diagnostic only. No trusted execution or proof coverage is established.\n\n");
     ensure_parent(&args.out)?;
     ensure_parent(&args.proof_receipt)?;
     ensure_parent(&args.md)?;
@@ -50,10 +67,9 @@ pub fn run_rust(mut args: ProofMarkRustArgs) -> Result<()> {
         &output.proof_receipt,
     )?;
     crate::render::write_markdown(&args.md, &output.markdown)?;
-    if mode == ProofMarkMode::Required && output.receipt.summary.review_obligations > 0 {
+    if mode == ProofMarkMode::Required {
         anyhow::bail!(
-            "proofmark required mode has {} obligation(s) needing review",
-            output.receipt.summary.review_obligations
+            "proofmark required mode needs trusted execution observations; imported reports cannot establish proof coverage"
         );
     }
     Ok(())
