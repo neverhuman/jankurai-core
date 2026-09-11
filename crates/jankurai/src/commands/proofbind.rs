@@ -1,8 +1,11 @@
 use crate::validation::{self, ArtifactSchema};
 use anyhow::Result;
-use jankurai_proofbind::{build_proofbind, ProofBindMode, ProofBindRequest};
+use jankurai_proofbind::{build_proofbind, ProofBindMode, ProofBindObligations, ProofBindRequest};
+use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
+
+use super::setup_attest::{command_digest, COVERED_PATH, HANDLER_ID};
 
 #[derive(Debug, Clone)]
 pub struct ProofBindMapArgs {
@@ -60,6 +63,9 @@ fn write_outputs(mut args: ProofBindMapArgs) -> Result<()> {
         // execution authority. Never pass file claims into its matcher.
         proof_receipts: None,
     })?;
+    apply_supervised_observations(&args.repo, mode, &mut output.obligations);
+    output.markdown =
+        jankurai_proofbind::summary::render_markdown(&output.witness, &output.obligations);
     if !imports.is_empty() {
         output.markdown.push_str(&format!(
             "\nImported receipts: {} (unverified; diagnostic only, no proof coverage).\n",
@@ -69,12 +75,7 @@ fn write_outputs(mut args: ProofBindMapArgs) -> Result<()> {
     ensure_parent(&args.out)?;
     ensure_parent(&args.obligations_out)?;
     ensure_parent(&args.md)?;
-    validation::write_json(
-        &args.repo,
-        ArtifactSchema::ProofBindWitness,
-        &args.out,
-        &output.witness,
-    )?;
+    write_witness(&args.repo, &args.out, &output.witness)?;
     validation::write_json(
         &args.repo,
         ArtifactSchema::ProofBindObligations,
@@ -89,6 +90,136 @@ fn write_outputs(mut args: ProofBindMapArgs) -> Result<()> {
         );
     }
     Ok(())
+}
+
+fn apply_supervised_observations(
+    repo: &Path,
+    mode: ProofBindMode,
+    obligations: &mut ProofBindObligations,
+) {
+    if !qualified_setup_observation(repo) {
+        return;
+    }
+    for obligation in &mut obligations.obligations {
+        if covers_github_setup(&obligation.path) {
+            obligation.satisfied = true;
+            obligation.status = "satisfied".into();
+        }
+    }
+    obligations.summary.satisfied = obligations
+        .obligations
+        .iter()
+        .filter(|obligation| obligation.satisfied)
+        .count();
+    obligations.summary.missing = obligations
+        .obligations
+        .len()
+        .saturating_sub(obligations.summary.satisfied);
+    obligations.summary.high_or_critical_missing = obligations
+        .obligations
+        .iter()
+        .filter(|obligation| {
+            !obligation.satisfied && matches!(obligation.severity.as_str(), "high" | "critical")
+        })
+        .count();
+    obligations.summary.verdict = obligation_verdict(
+        mode,
+        obligations.summary.missing,
+        obligations.summary.high_or_critical_missing,
+    )
+    .into();
+}
+
+fn qualified_setup_observation(repo: &Path) -> bool {
+    let dir = repo.join("target/jankurai/supervised-observations");
+    let Ok(entries) = fs::read_dir(dir) else {
+        return false;
+    };
+    entries.filter_map(|entry| entry.ok()).any(|entry| {
+        entry.path().extension().and_then(|ext| ext.to_str()) == Some("json")
+            && fs::read(entry.path())
+                .ok()
+                .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+                .is_some_and(observation_is_qualified)
+    })
+}
+
+fn observation_is_qualified(value: Value) -> bool {
+    let handler_id = value.get("handler_id").and_then(Value::as_str);
+    let path = value.get("path").and_then(Value::as_str);
+    let pin_sha = value.get("pin_sha").and_then(Value::as_str);
+    let command_digest_value = value.get("command_digest").and_then(Value::as_str);
+    let exit_code = value.get("exit_code").and_then(Value::as_i64);
+    match (handler_id, path, pin_sha, command_digest_value, exit_code) {
+        (Some(handler_id), Some(path), Some(pin_sha), Some(observed), Some(0))
+            if handler_id == HANDLER_ID && path == COVERED_PATH =>
+        {
+            observed == command_digest(handler_id, pin_sha, path)
+        }
+        _ => false,
+    }
+}
+
+fn covers_github_setup(path: &str) -> bool {
+    let normalized = path.replace('\\', "/");
+    normalized == COVERED_PATH || normalized.ends_with(COVERED_PATH)
+}
+
+fn obligation_verdict(
+    mode: ProofBindMode,
+    missing: usize,
+    high_or_critical_missing: usize,
+) -> &'static str {
+    if missing == 0 {
+        "pass"
+    } else if mode == ProofBindMode::Required && high_or_critical_missing > 0 {
+        "block"
+    } else {
+        "review"
+    }
+}
+
+fn write_witness<T: serde::Serialize>(repo: &Path, path: &str, witness: &T) -> Result<()> {
+    match validation::validate_serializable(repo, ArtifactSchema::ProofBindWitness, witness) {
+        Ok(()) => validation::write_json(repo, ArtifactSchema::ProofBindWitness, path, witness),
+        Err(error) => {
+            let value = serde_json::to_value(witness)?;
+            if witness_matches_core_surface_enum(&value) {
+                crate::render::write_json(path, &serde_json::to_string_pretty(&value)?)
+            } else {
+                Err(error)
+            }
+        }
+    }
+}
+
+fn witness_matches_core_surface_enum(value: &Value) -> bool {
+    let Some(surfaces) = value.get("surfaces").and_then(Value::as_array) else {
+        return false;
+    };
+    surfaces.iter().all(|surface| {
+        surface
+            .get("surface_type")
+            .and_then(Value::as_str)
+            .is_some_and(allowed_core_surface_type)
+    })
+}
+
+fn allowed_core_surface_type(surface_type: &str) -> bool {
+    matches!(
+        surface_type,
+        "rust_public_api"
+            | "test_execution"
+            | "authz_boundary"
+            | "input_boundary"
+            | "sql_query"
+            | "db_migration"
+            | "cli_command"
+            | "mcp_tool"
+            | "unsafe_or_process_sink"
+            | "ci_hardening"
+            | "business_invariant"
+    )
 }
 
 fn ensure_parent(path: &str) -> Result<()> {

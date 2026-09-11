@@ -352,6 +352,7 @@ fn cell_registry_and_manifest_schemas_parse() {
             "cli_command",
             "mcp_tool",
             "unsafe_or_process_sink",
+            "ci_hardening",
             "business_invariant"
         ])
     );
