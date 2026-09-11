@@ -2683,6 +2683,7 @@ fn run_audit_and_write(args: AuditArgs) -> anyhow::Result<()> {
             git.mode = "changed-fast".into();
         }
     }
+    progress.tick("apply score policy");
     progress.tick("apply mode and baseline");
     if mode == AuditMode::Release {
         outcome::finalize_release(
