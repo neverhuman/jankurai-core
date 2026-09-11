@@ -24,14 +24,30 @@ pub unsafe fn configure_git_reads() {
         ("GIT_CONFIG_NOSYSTEM", "1"),
         ("GIT_CONFIG_GLOBAL", "/dev/null"),
         ("GIT_NO_REPLACE_OBJECTS", "1"),
-        ("GIT_CONFIG_COUNT", "2"),
+        ("GIT_CONFIG_COUNT", "4"),
         ("GIT_CONFIG_KEY_0", "core.fsmonitor"),
         ("GIT_CONFIG_VALUE_0", "false"),
         ("GIT_CONFIG_KEY_1", "core.untrackedCache"),
         ("GIT_CONFIG_VALUE_1", "false"),
+        ("GIT_CONFIG_KEY_2", "maintenance.autoDetach"),
+        ("GIT_CONFIG_VALUE_2", "false"),
+        ("GIT_CONFIG_KEY_3", "gc.autoDetach"),
+        ("GIT_CONFIG_VALUE_3", "false"),
     ] {
         std::env::set_var(key, value);
     }
+}
+
+/// Point `git status` at a copied index so a read-only audit cannot refresh `.git/index`.
+///
+/// # Safety
+/// Call only during single-threaded startup, after [`configure_git_reads`] and
+/// before any environment readers or audit workers can run concurrently.
+pub unsafe fn isolate_git_index(repo: &Path) {
+    let isolated =
+        std::env::temp_dir().join(format!("jankurai-read-only-index-{}", std::process::id()));
+    let _ = fs::copy(repo.join(".git").join("index"), &isolated);
+    std::env::set_var("GIT_INDEX_FILE", isolated);
 }
 
 pub fn validate_outputs<'a>(repo: &Path, outputs: impl IntoIterator<Item = &'a str>) -> Result<()> {

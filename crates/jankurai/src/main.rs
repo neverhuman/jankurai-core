@@ -2573,6 +2573,10 @@ fn run_audit_and_write(args: AuditArgs) -> anyhow::Result<()> {
             .flatten(),
         );
         jankurai::commands::audit_readonly::validate_outputs(&args.repo, outputs)?;
+        // configure_git_reads already stripped inherited GIT_* values.
+        unsafe {
+            jankurai::commands::audit_readonly::isolate_git_index(&args.repo);
+        }
     }
     if args.json == "-" && args.md == "-" {
         anyhow::bail!("use at most one stdout target; JSON and Markdown may not share stdout");
