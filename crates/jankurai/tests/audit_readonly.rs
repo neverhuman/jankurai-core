@@ -1,5 +1,6 @@
 use serde_json::Value;
-use std::collections::BTreeMap;
+use sha2::{Digest, Sha256};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -42,6 +43,15 @@ fn fixture() -> TempDir {
         ],
     ] {
         let result = Command::new("git")
+            // Git 2.55 detaches automatic maintenance even for a fresh commit.
+            // Finish the fixture's writer before taking the complete inventory;
+            // otherwise its maintenance.lock can disappear during the audit.
+            .args([
+                "-c",
+                "maintenance.autoDetach=false",
+                "-c",
+                "gc.autoDetach=false",
+            ])
             .args(args)
             .current_dir(root)
             .env("GIT_CONFIG_GLOBAL", "/dev/null")
@@ -74,6 +84,30 @@ fn inventory(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
             )
         })
         .collect()
+}
+
+fn assert_inventory_unchanged(root: &Path, before: &BTreeMap<PathBuf, Vec<u8>>) {
+    let after = inventory(root);
+    let paths = before.keys().chain(after.keys()).collect::<BTreeSet<_>>();
+    let digest = |bytes: Option<&Vec<u8>>| {
+        bytes.map_or_else(
+            || "absent".into(),
+            |bytes| format!("{:x}", Sha256::digest(bytes)),
+        )
+    };
+    let changes = paths
+        .into_iter()
+        .filter_map(|path| {
+            let old = before.get(path);
+            let new = after.get(path);
+            (old != new).then(|| format!("{}: {} -> {}", path.display(), digest(old), digest(new)))
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        changes.is_empty(),
+        "audit changed source/Git inventory:\n{}",
+        changes.join("\n")
+    );
 }
 
 fn audit(repo: &Path, json: &Path, markdown: &Path, mode: &str, extra: &[&str]) -> Output {
@@ -111,7 +145,7 @@ fn complete_audits_preserve_source_git_state_and_all_automatic_outputs() {
         assert_eq!(report["decision"]["passed"], false);
         assert_eq!(report["decision"]["minimum_score"], 100);
         assert!(fs::metadata(markdown).unwrap().len() > 0);
-        assert_eq!(inventory(repo.path()), before);
+        assert_inventory_unchanged(repo.path(), &before);
     }
 }
 
@@ -129,7 +163,7 @@ fn source_outputs_aliases_and_existing_evidence_are_refused_before_any_write() {
         let result = audit(repo.path(), &json, &fresh, "advisory", &[]);
         assert!(!result.status.success());
         assert!(!fresh.exists());
-        assert_eq!(inventory(repo.path()), before);
+        assert_inventory_unchanged(repo.path(), &before);
     }
     let same = output.path().join("same");
     assert!(jankurai::commands::audit_readonly::validate_outputs(repo.path(), ["-", "-"]).is_err());
@@ -222,7 +256,7 @@ fn redirected_outputs_and_repository_fsmonitor_cannot_write_source_or_execute() 
         String::from_utf8_lossy(&result.stderr)
     );
     assert!(!sentinel.exists());
-    assert_eq!(inventory(repo.path()), before);
+    assert_inventory_unchanged(repo.path(), &before);
     let ordinary = Command::new(env!("CARGO_BIN_EXE_jankurai"))
         .arg("audit")
         .arg(repo.path())
