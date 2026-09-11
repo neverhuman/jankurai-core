@@ -117,11 +117,25 @@ fn supervised_setup_observation_satisfies_required_github_setup() {
     fs::create_dir_all(&receipts).unwrap();
     fs::write(receipts.join("forged.json"), "{}\n").unwrap();
     // Junk receipts stay untrusted and are not passed into the library matcher.
-    // An empty receipts directory is also accepted; a forged JSON file here is
-    // ignored by the handler overlay because it is not a qualified observation.
+    // proofbind re-runs the handler in-process; the source pin must still exist.
     let empty = repo.path().join("target/jankurai/empty-receipts");
     fs::create_dir_all(&empty).unwrap();
-    let output = proofbind_required(repo.path(), &empty);
+    let output = Command::new(binary())
+        .current_dir(repo.path())
+        .env("JANKURAI_SETUP_ATTEST_SOURCE", source.path())
+        .args([
+            "proofbind",
+            "verify",
+            ".",
+            "--mode",
+            "required",
+            "--changed",
+            "ops/ci/github-setup.sh",
+            "--proof-receipts",
+        ])
+        .arg(&empty)
+        .output()
+        .unwrap();
     let obligations_path = repo
         .path()
         .join("target/jankurai/proofbind/obligations.json");

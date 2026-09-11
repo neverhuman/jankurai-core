@@ -5,7 +5,7 @@ use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::setup_attest::{command_digest, COVERED_PATH, HANDLER_ID};
+use super::setup_attest::COVERED_PATH;
 
 #[derive(Debug, Clone)]
 pub struct ProofBindMapArgs {
@@ -97,7 +97,17 @@ fn apply_supervised_observations(
     mode: ProofBindMode,
     obligations: &mut ProofBindObligations,
 ) {
-    if !qualified_setup_observation(repo) {
+    let needs_setup = obligations
+        .obligations
+        .iter()
+        .any(|obligation| covers_github_setup(&obligation.path));
+    if !needs_setup {
+        return;
+    }
+    // Trust only a handler that succeeds in this process. Disk JSON is an
+    // artifact, not an authority — a forged observation cannot mint coverage.
+    let source = std::env::var_os("JANKURAI_SETUP_ATTEST_SOURCE").map(PathBuf::from);
+    if super::setup_attest::run(repo, source).is_err() {
         return;
     }
     for obligation in &mut obligations.obligations {
@@ -128,36 +138,6 @@ fn apply_supervised_observations(
         obligations.summary.high_or_critical_missing,
     )
     .into();
-}
-
-fn qualified_setup_observation(repo: &Path) -> bool {
-    let dir = repo.join("target/jankurai/supervised-observations");
-    let Ok(entries) = fs::read_dir(dir) else {
-        return false;
-    };
-    entries.filter_map(|entry| entry.ok()).any(|entry| {
-        entry.path().extension().and_then(|ext| ext.to_str()) == Some("json")
-            && fs::read(entry.path())
-                .ok()
-                .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
-                .is_some_and(observation_is_qualified)
-    })
-}
-
-fn observation_is_qualified(value: Value) -> bool {
-    let handler_id = value.get("handler_id").and_then(Value::as_str);
-    let path = value.get("path").and_then(Value::as_str);
-    let pin_sha = value.get("pin_sha").and_then(Value::as_str);
-    let command_digest_value = value.get("command_digest").and_then(Value::as_str);
-    let exit_code = value.get("exit_code").and_then(Value::as_i64);
-    match (handler_id, path, pin_sha, command_digest_value, exit_code) {
-        (Some(handler_id), Some(path), Some(pin_sha), Some(observed), Some(0))
-            if handler_id == HANDLER_ID && path == COVERED_PATH =>
-        {
-            observed == command_digest(handler_id, pin_sha, path)
-        }
-        _ => false,
-    }
 }
 
 fn covers_github_setup(path: &str) -> bool {
