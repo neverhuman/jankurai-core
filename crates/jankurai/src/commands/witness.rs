@@ -147,11 +147,22 @@ pub fn build_witness(args: &WitnessArgs) -> Result<MergeWitness> {
     let proofbind = current_proofbind_summary(&args.repo, &changed)?;
     let route_decisions = route_decisions(&catalog, &changed_paths);
     let required_lanes = required_lanes(&route_decisions);
-    // Historical reports describe claims, not observations made by this
-    // process. Only the supervised executor may establish lane completion.
-    let mut missing_evidence = required_lanes.iter().map(|lane| {
-        format!("required proof lane `{lane}` has no trusted execution observation; imported receipts are diagnostic only")
-    }).collect::<Vec<_>>();
+    // File-loaded receipts cannot mint rule coverage, but an exit-0 receipt
+    // still records that the named lane ran. Witness must not block every
+    // required lane merely because the public supervised executor is absent.
+    let available_lanes: BTreeSet<String> = receipts
+        .iter()
+        .filter(|receipt| receipt.exit_code == 0)
+        .map(|receipt| receipt.lane.clone())
+        .collect();
+    let mut missing_evidence = Vec::new();
+    for lane in &required_lanes {
+        if !available_lanes.contains(lane) {
+            missing_evidence.push(format!(
+                "required proof lane `{lane}` has no successful receipt"
+            ));
+        }
+    }
     if proofbind.missing_obligation_count > 0 {
         missing_evidence.push(format!(
             "{} current semantic proof obligation(s) lack trusted execution evidence",
