@@ -45,6 +45,7 @@ pub mod rust;
 pub mod score;
 pub mod security;
 mod security_sbom;
+pub mod setup_attest;
 mod shell;
 pub mod update;
 pub mod vibe;

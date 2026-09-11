@@ -7,7 +7,7 @@ use jankurai::commands::{
     adopt, agent, audit_file, badge, bench, cell, certify, conformance, context_pack, copy_code,
     coverage, diff_audit, doctor, exceptions, fleet, gate, govern, history, hooks, init, kickoff,
     migrate, optimize, paper, postmortem, proof, proofbind, proofmark, publish, registry, repair,
-    repair_plan, repair_tasks, rules, rust, score, security, update, vibe, witness,
+    repair_plan, repair_tasks, rules, rust, score, security, setup_attest, update, vibe, witness,
 };
 use jankurai::render::{render_markdown, write_json, write_markdown};
 use jankurai::report::issues::IssueFormat;
@@ -81,6 +81,8 @@ enum Commands {
         #[command(subcommand)]
         command: ProofMarkCommand,
     },
+    #[command(name = "setup-attest")]
+    SetupAttest(SetupAttestArgs),
     Registry(RegistryArgs),
     Cell(CellArgs),
     Migrate(MigrateArgs),
@@ -859,6 +861,14 @@ struct ProofBindVerifyArgs {
         default_value = "target/jankurai/proofbind/proofbind.md"
     )]
     md: String,
+}
+
+#[derive(Args, Debug)]
+struct SetupAttestArgs {
+    #[arg(default_value = ".", value_parser = parse_repo_arg)]
+    repo: PathBuf,
+    #[arg(long, value_name = "PATH")]
+    source: Option<PathBuf>,
 }
 
 #[derive(Args, Debug)]
@@ -1931,6 +1941,9 @@ fn main() -> anyhow::Result<()> {
                 })?;
             }
         },
+        Some(Commands::SetupAttest(args)) => {
+            setup_attest::run(&args.repo, args.source)?;
+        }
         Some(Commands::ProofMark { command }) => match command {
             ProofMarkCommand::Rust(args) => {
                 proofmark::run_rust(proofmark::ProofMarkRustArgs {

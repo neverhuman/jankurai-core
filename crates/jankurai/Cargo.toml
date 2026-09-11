@@ -23,8 +23,8 @@ jankurai-audit-dedup = { git = "https://github.com/neverhuman/jankurai-tools-ded
 jankurai-audit-kernel = { git = "https://github.com/neverhuman/jankurai-tools-kernel.git", tag = "ci-a9dfb86457267a76e30e78c96263ade80c0d3c95", package = "jankurai-audit-kernel", version = "0.1.0" }
 jankurai-fleet = { git = "https://github.com/neverhuman/jankurai-tools-fleet.git", tag = "ci-668532cd06f87aec6b677ab061405e51871e57b8", package = "jankurai-fleet", version = "0.1.0" }
 jankurai-guard = { git = "https://github.com/neverhuman/jankurai-tools-guard.git", tag = "ci-ac11dec26907b986c62b1112fc6e781e1e2894c3", package = "jankurai-guard", version = "0.1.0", default-features = false }
-jankurai-proofbind = { git = "https://github.com/neverhuman/jankurai-tools-proof.git", tag = "ci-662fc1248f65e623f67873adfedfa83c171d73de", package = "jankurai-proofbind", version = "0.8.0" }
-jankurai-proofmark = { git = "https://github.com/neverhuman/jankurai-tools-proof.git", tag = "ci-662fc1248f65e623f67873adfedfa83c171d73de", package = "jankurai-proofmark", version = "0.8.0" }
+jankurai-proofbind = { git = "https://github.com/neverhuman/jankurai-tools-proof.git", tag = "ci-00c8ea71b7cfe94f3bf4be6a74675e8d54f7a70c", package = "jankurai-proofbind", version = "0.8.0" }
+jankurai-proofmark = { git = "https://github.com/neverhuman/jankurai-tools-proof.git", tag = "ci-00c8ea71b7cfe94f3bf4be6a74675e8d54f7a70c", package = "jankurai-proofmark", version = "0.8.0" }
 once_cell = "1.21"
 rayon = "1.11"
 regex = "1.12"
