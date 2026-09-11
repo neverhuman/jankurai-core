@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -91,6 +92,12 @@ pub struct ProofReceiptSummary {
     pub receipt_path: Option<String>,
     pub git_head: Option<String>,
     pub changed_paths: Vec<String>,
+    #[serde(default = "unverified_import")]
+    pub trust_status: String,
+}
+
+fn unverified_import() -> String {
+    "unverified-import".into()
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -137,20 +144,19 @@ pub fn build_witness(args: &WitnessArgs) -> Result<MergeWitness> {
         },
     )?;
     let receipts = load_proof_receipts(&args.repo, args.proof_receipts.as_deref())?;
-    let proofbind = load_proofbind_summary(&args.repo, args.proof_receipts.as_deref())?;
+    let proofbind = current_proofbind_summary(&args.repo, &changed)?;
     let route_decisions = route_decisions(&catalog, &changed_paths);
     let required_lanes = required_lanes(&route_decisions);
-    let available_lanes: BTreeSet<String> = receipts
-        .iter()
-        .map(|receipt| receipt.lane.clone())
-        .collect();
-    let mut missing_evidence = Vec::new();
-    for lane in &required_lanes {
-        if !available_lanes.contains(lane) {
-            missing_evidence.push(format!(
-                "required proof lane `{lane}` has no successful receipt"
-            ));
-        }
+    // Historical reports describe claims, not observations made by this
+    // process. Only the supervised executor may establish lane completion.
+    let mut missing_evidence = required_lanes.iter().map(|lane| {
+        format!("required proof lane `{lane}` has no trusted execution observation; imported receipts are diagnostic only")
+    }).collect::<Vec<_>>();
+    if proofbind.missing_obligation_count > 0 {
+        missing_evidence.push(format!(
+            "{} current semantic proof obligation(s) lack trusted execution evidence",
+            proofbind.missing_obligation_count
+        ));
     }
     let generated_zone_touches = generated_zone_touches(&catalog.generated_zones, &changed_paths);
     if !generated_zone_touches.is_empty() {
@@ -161,16 +167,15 @@ pub fn build_witness(args: &WitnessArgs) -> Result<MergeWitness> {
 
     let current_findings = finding_map_from_report(&report);
     let baseline_value = if let Some(path) = args.baseline.as_deref() {
-        Some(load_json(&args.repo.join(path)).or_else(|_| load_json(Path::new(path)))?)
+        Some(load_json(&resolve(&args.repo, path))?)
     } else {
         None
     };
-    let baseline_score = baseline_value.as_ref().map(|value| {
-        value
-            .get("score")
-            .and_then(Value::as_i64)
-            .unwrap_or(report.score as i64) as i32
-    });
+    let ratchet = baseline_value
+        .as_ref()
+        .map(|value| crate::audit::baseline::compare_report_to_value(&report, value))
+        .transpose()?;
+    let baseline_score = ratchet.as_ref().map(|comparison| comparison.baseline_score);
     let baseline_caps = baseline_value
         .as_ref()
         .map(|value| string_set(value.get("caps_applied")))
@@ -192,7 +197,10 @@ pub fn build_witness(args: &WitnessArgs) -> Result<MergeWitness> {
         .map(|decision| !decision.passed)
         .unwrap_or(false);
     let score_delta = baseline_score.map(|score| report.score - score);
-    let decision = if score_delta.is_some_and(|delta| delta < 0) {
+    let decision = if ratchet
+        .as_ref()
+        .is_some_and(|comparison| !comparison.passed)
+    {
         "ratchet_fail"
     } else if current_failed || has_new_high || !missing_evidence.is_empty() {
         "block"
@@ -351,17 +359,40 @@ fn generated_zone_touches(
     out
 }
 
-fn load_proof_receipts(repo: &Path, path: Option<&str>) -> Result<Vec<ProofReceiptSummary>> {
+pub(super) fn load_proof_receipts(
+    repo: &Path,
+    path: Option<&str>,
+) -> Result<Vec<ProofReceiptSummary>> {
     let Some(path) = path else {
         return Ok(vec![]);
     };
+    let optional_default = path == "target/jankurai/proof-receipts";
     let path = resolve(repo, path);
-    if !path.exists() {
-        return Ok(vec![]);
+    let metadata = match fs::symlink_metadata(&path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound && optional_default => {
+            return Ok(vec![])
+        }
+        Err(error) => {
+            return Err(error)
+                .with_context(|| format!("inspect requested proof receipts {}", path.display()))
+        }
+    };
+    if metadata.is_symlink() {
+        anyhow::bail!(
+            "proof receipt input may not be a symlink: {}",
+            path.display()
+        );
     }
     let mut entries = Vec::new();
-    if path.is_dir() {
-        for entry in fs::read_dir(&path).with_context(|| format!("read {}", path.display()))? {
+    if metadata.is_dir() {
+        for (index, entry) in fs::read_dir(&path)
+            .with_context(|| format!("read {}", path.display()))?
+            .enumerate()
+        {
+            if index >= 4096 {
+                anyhow::bail!("proof receipt directory exceeds its entry limit");
+            }
             let entry = entry?;
             if entry.path().extension().and_then(|ext| ext.to_str()) == Some("json") {
                 entries.push(entry.path());
@@ -373,235 +404,44 @@ fn load_proof_receipts(repo: &Path, path: Option<&str>) -> Result<Vec<ProofRecei
     }
     let mut out = Vec::new();
     for entry in entries {
-        let text =
-            fs::read_to_string(&entry).with_context(|| format!("read {}", entry.display()))?;
-        let value: Value =
-            serde_json::from_str(&text).with_context(|| format!("parse {}", entry.display()))?;
+        let value = load_json(&entry)?;
         validation::validate_value(repo, ArtifactSchema::ProofReceipt, &value)?;
         let receipt: ProofReceipt = serde_json::from_value(value)?;
-        if receipt.exit_code == 0 {
-            out.push(ProofReceiptSummary {
-                lane: receipt.lane,
-                command: receipt.command,
-                exit_code: receipt.exit_code,
-                receipt_path: Some(
-                    entry
-                        .strip_prefix(repo)
-                        .unwrap_or(&entry)
-                        .to_string_lossy()
-                        .replace('\\', "/"),
-                ),
-                git_head: receipt.git_head,
-                changed_paths: receipt.changed_paths,
-            });
-        }
+        out.push(ProofReceiptSummary {
+            lane: receipt.lane,
+            command: receipt.command,
+            exit_code: receipt.exit_code,
+            receipt_path: Some(
+                entry
+                    .strip_prefix(repo)
+                    .unwrap_or(&entry)
+                    .to_string_lossy()
+                    .replace('\\', "/"),
+            ),
+            git_head: receipt.git_head,
+            changed_paths: receipt.changed_paths,
+            trust_status: unverified_import(),
+        });
     }
     Ok(out)
 }
 
-fn load_proofbind_summary(
-    repo: &Path,
-    proof_receipts: Option<&str>,
-) -> Result<ProofBindWitnessSummary> {
-    let obligations_path = repo.join("target/jankurai/proofbind/obligations.json");
-    if !obligations_path.exists() {
-        return Ok(ProofBindWitnessSummary {
-            changed_surface_count: 0,
-            satisfied_obligation_count: 0,
-            missing_obligation_count: 0,
-            verdict: "not_run".into(),
-        });
-    }
-    let obligations_value = load_json(&obligations_path)?;
-    validation::validate_value(
-        repo,
-        ArtifactSchema::ProofBindObligations,
-        &obligations_value,
-    )?;
-    let receipt_values = load_proof_receipt_values(repo, proof_receipts)?;
-    let changed_surface_count = obligations_value
-        .get("summary")
-        .and_then(|summary| summary.get("changed_surface_count"))
-        .and_then(Value::as_u64)
-        .unwrap_or(0) as usize;
-    let obligations = obligations_value
-        .get("obligations")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let mut satisfied = 0usize;
-    let mut missing = 0usize;
-    for obligation in &obligations {
-        let already_satisfied = obligation
-            .get("satisfied")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        if already_satisfied
-            || receipt_values
-                .iter()
-                .any(|receipt| receipt_satisfies_obligation(obligation, receipt))
-        {
-            satisfied += 1;
-        } else {
-            missing += 1;
-        }
-    }
-    let configured_verdict = obligations_value
-        .get("summary")
-        .and_then(|summary| summary.get("verdict"))
-        .and_then(Value::as_str)
-        .unwrap_or("review");
-    let verdict = if missing == 0 {
-        "pass"
-    } else {
-        configured_verdict
-    };
+fn current_proofbind_summary(repo: &Path, changed: &[PathBuf]) -> Result<ProofBindWitnessSummary> {
+    // Reclassify the current source. An authored obligations.json, including
+    // an empty inventory or satisfied=true, cannot grant or remove coverage.
+    let output = jankurai_proofbind::build_proofbind(jankurai_proofbind::ProofBindRequest {
+        repo_root: repo.to_path_buf(),
+        changed_paths: changed.to_vec(),
+        changed_from: None,
+        mode: jankurai_proofbind::ProofBindMode::Required,
+        proof_receipts: None,
+    })?;
     Ok(ProofBindWitnessSummary {
-        changed_surface_count,
-        satisfied_obligation_count: satisfied,
-        missing_obligation_count: missing,
-        verdict: verdict.into(),
+        changed_surface_count: output.witness.surfaces.len(),
+        satisfied_obligation_count: output.obligations.summary.satisfied,
+        missing_obligation_count: output.obligations.summary.missing,
+        verdict: output.obligations.summary.verdict,
     })
-}
-
-fn load_proof_receipt_values(repo: &Path, path: Option<&str>) -> Result<Vec<Value>> {
-    let Some(path) = path else {
-        return Ok(vec![]);
-    };
-    let path = resolve(repo, path);
-    if !path.exists() {
-        return Ok(vec![]);
-    }
-    let mut entries = Vec::new();
-    if path.is_dir() {
-        for entry in fs::read_dir(&path).with_context(|| format!("read {}", path.display()))? {
-            let entry = entry?;
-            if entry.path().extension().and_then(|ext| ext.to_str()) == Some("json") {
-                entries.push(entry.path());
-            }
-        }
-        entries.sort();
-    } else {
-        entries.push(path);
-    }
-    let mut values = Vec::new();
-    for entry in entries {
-        let text =
-            fs::read_to_string(&entry).with_context(|| format!("read {}", entry.display()))?;
-        let value: Value =
-            serde_json::from_str(&text).with_context(|| format!("parse {}", entry.display()))?;
-        validation::validate_value(repo, ArtifactSchema::ProofReceipt, &value)?;
-        if value.get("exit_code").and_then(Value::as_i64).unwrap_or(1) == 0 {
-            values.push(value);
-        }
-    }
-    Ok(values)
-}
-
-fn receipt_satisfies_obligation(obligation: &Value, receipt: &Value) -> bool {
-    let obligation_id = obligation
-        .get("obligation_id")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    let proofmark = receipt
-        .get("extensions")
-        .and_then(|extensions| extensions.get("proofmark"))
-        .unwrap_or(&Value::Null);
-    if proofmark
-        .get("satisfied_obligations")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .any(|id| id == obligation_id)
-    {
-        return true;
-    }
-    if proofmark
-        .get("obligation_results")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .any(|result| {
-            result
-                .get("obligation_id")
-                .and_then(Value::as_str)
-                .is_some_and(|id| id == obligation_id)
-                && result
-                    .get("status")
-                    .and_then(Value::as_str)
-                    .is_some_and(|status| status == "pass")
-        })
-    {
-        return true;
-    }
-    let lane = receipt
-        .get("lane")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    if lane == "proofmark-rust" {
-        return false;
-    }
-    let lane_matches = obligation
-        .get("required_lanes")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .any(|required| required == lane);
-    if !lane_matches {
-        return false;
-    }
-    let path = obligation
-        .get("path")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    let path_matches = receipt
-        .get("changed_paths")
-        .and_then(Value::as_array)
-        .map(|paths| {
-            paths
-                .iter()
-                .filter_map(Value::as_str)
-                .any(|changed| changed == path || path.starts_with(&format!("{changed}/")))
-        })
-        .unwrap_or(true);
-    if !path_matches {
-        return false;
-    }
-    let covered_rules = receipt_rules_covered(receipt);
-    covered_rules.is_empty()
-        || obligation
-            .get("rule_ids")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .any(|rule| covered_rules.contains(rule))
-}
-
-fn receipt_rules_covered(receipt: &Value) -> BTreeSet<String> {
-    receipt
-        .get("rules_covered")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|item| {
-            if let Some(rule) = item.as_str() {
-                return Some(rule.to_string());
-            }
-            let status = item
-                .get("status")
-                .and_then(Value::as_str)
-                .unwrap_or("covered");
-            if !matches!(status, "covered" | "pass" | "satisfied") {
-                return None;
-            }
-            item.get("rule_id")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-        })
-        .collect()
 }
 
 fn finding_map_from_report(report: &Report) -> BTreeMap<String, FindingSummary> {
@@ -739,8 +579,44 @@ fn resolve(repo: &Path, path: &str) -> PathBuf {
 }
 
 fn load_json(path: &Path) -> Result<Value> {
-    let text = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
-    serde_json::from_str(&text).with_context(|| format!("parse {}", path.display()))
+    const LIMIT: u64 = 16 * 1024 * 1024;
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    let file = options
+        .open(path)
+        .with_context(|| format!("open {}", path.display()))?;
+    let before = file.metadata()?;
+    if !before.is_file() || before.len() == 0 || before.len() > LIMIT {
+        anyhow::bail!("invalid or oversized JSON evidence: {}", path.display());
+    }
+    let mut text = String::new();
+    (&file).take(LIMIT + 1).read_to_string(&mut text)?;
+    let after = file.metadata()?;
+    let named = fs::symlink_metadata(path)?;
+    if !named.is_file()
+        || text.len() as u64 != before.len()
+        || before.len() != after.len()
+        || before.modified()? != after.modified()?
+    {
+        anyhow::bail!("JSON evidence changed during read: {}", path.display());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if before.dev() != named.dev()
+            || before.ino() != named.ino()
+            || before.ctime() != after.ctime()
+            || before.ctime_nsec() != after.ctime_nsec()
+        {
+            anyhow::bail!("JSON evidence identity changed: {}", path.display());
+        }
+    }
+    validation::parse_json_value_strict(&text).with_context(|| format!("parse {}", path.display()))
 }
 
 fn string_set(value: Option<&Value>) -> BTreeSet<String> {

@@ -367,6 +367,9 @@ struct AuditArgs {
     /// Suppress automatic writes to configured badge/README files.
     #[arg(long)]
     no_badge: bool,
+    /// Suppress source/cache writes and require fresh report paths outside REPO.
+    #[arg(long)]
+    read_only: bool,
     #[arg(long)]
     full: bool,
     #[arg(long, value_name = "SECS")]
@@ -1565,6 +1568,21 @@ struct RustDiagnoseArgs {
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse_from(normalize_cli_args(std::env::args_os()));
+    if matches!(
+        &cli.command,
+        Some(Commands::Audit(_))
+            | Some(Commands::Score(_))
+            | Some(Commands::Witness(_))
+            | Some(Commands::ProofBind { .. })
+            | Some(Commands::ProofMark { .. })
+            | None
+    ) {
+        // CLI parsing and dispatch are still single-threaded here.
+        // Ordinary audits must not invoke repository-configured fsmonitor code.
+        unsafe {
+            jankurai::commands::audit_readonly::configure_git_reads();
+        }
+    }
     match cli.command {
         Some(Commands::Versions(args)) => {
             check_versions(&args.repo)?;
@@ -2382,6 +2400,7 @@ fn run_init_bootstrap_commit(args: InitArgs) -> anyhow::Result<()> {
         score_history_max_bytes: 1_048_576,
         no_score_history: false,
         no_badge: false,
+        read_only: false,
         changed_fast: false,
         timings_json: None,
         full: true,
@@ -2540,6 +2559,21 @@ fn score_trailers_from_report(
 
 fn run_audit_and_write(args: AuditArgs) -> anyhow::Result<()> {
     let command_started = std::time::Instant::now();
+    if args.read_only {
+        let mut outputs = vec![args.json.as_str(), args.md.as_str()];
+        outputs.extend(
+            [
+                args.timings_json.as_deref(),
+                args.sarif.as_deref(),
+                args.junit.as_deref(),
+                args.github_step_summary.as_deref(),
+                args.repair_queue_jsonl.as_deref(),
+            ]
+            .into_iter()
+            .flatten(),
+        );
+        jankurai::commands::audit_readonly::validate_outputs(&args.repo, outputs)?;
+    }
     if args.json == "-" && args.md == "-" {
         anyhow::bail!("use at most one stdout target; JSON and Markdown may not share stdout");
     }
@@ -2577,6 +2611,7 @@ fn run_audit_and_write(args: AuditArgs) -> anyhow::Result<()> {
                 // Cached scope cannot authorize an enforcing audit or consume
                 // explicitly requested policy, baseline, or proof inputs.
                 enabled: !args.full
+                    && !args.read_only
                     && requested_mode == AuditMode::Advisory
                     && args.baseline.is_none()
                     && args.policy.is_none()
@@ -2647,25 +2682,33 @@ fn run_audit_and_write(args: AuditArgs) -> anyhow::Result<()> {
     let md_text = render_markdown(&report);
     progress.tick("write JSON and Markdown");
     let report_write_started = std::time::Instant::now();
-    validation::write_json(&args.repo, ArtifactSchema::RepoScore, &args.json, &report)?;
-    write_markdown(&args.md, &md_text)?;
+    let write_report = |path: &str, content: &str| -> anyhow::Result<()> {
+        if args.read_only {
+            jankurai::commands::audit_readonly::write_report(&args.repo, path, content)
+        } else {
+            write_json(path, content)
+        }
+    };
+    validation::validate_serializable(&args.repo, ArtifactSchema::RepoScore, &report)?;
+    write_report(&args.json, &serde_json::to_string_pretty(&report)?)?;
+    write_report(&args.md, &md_text)?;
     if let Some(path) = args.sarif.as_deref() {
-        write_json(path, &jankurai::report::sarif::render_sarif(&report))?;
+        write_report(path, &jankurai::report::sarif::render_sarif(&report))?;
     }
     if let Some(path) = args.junit.as_deref() {
-        write_json(path, &jankurai::report::junit::render_junit(&report))?;
+        write_report(path, &jankurai::report::junit::render_junit(&report))?;
     }
     if let Some(path) = args.github_step_summary.as_deref() {
-        write_markdown(
+        write_report(
             path,
             &jankurai::report::github::render_step_summary(&report),
         )?;
     }
     if let Some(path) = args.repair_queue_jsonl.as_deref() {
-        write_json(path, &jankurai::report::issues::repair_queue_jsonl(&report))?;
+        write_report(path, &jankurai::report::issues::repair_queue_jsonl(&report))?;
     }
     timings.record_duration("report_write", report_write_started.elapsed());
-    let write_history = !args.no_score_history && !changed_fast_effective;
+    let write_history = !args.read_only && !args.no_score_history && !changed_fast_effective;
     if write_history {
         let history_started = std::time::Instant::now();
         let policy = jankurai::score_history::ScoreHistoryPolicy::from_repo(&args.repo)
@@ -2700,9 +2743,12 @@ fn run_audit_and_write(args: AuditArgs) -> anyhow::Result<()> {
     }
     if let Some(path) = args.timings_json.as_deref() {
         timings.total_ms = command_started.elapsed().as_millis();
-        write_json(path, &serde_json::to_string_pretty(&timings)?)?;
+        write_report(path, &serde_json::to_string_pretty(&timings)?)?;
     }
-    if let Some(notice) = update::audit_upgrade_notice(&args.repo) {
+    if let Some(notice) = (!args.read_only)
+        .then(|| update::audit_upgrade_notice(&args.repo))
+        .flatten()
+    {
         eprintln!(
             "{}",
             jankurai::ui::epaint(
@@ -2736,19 +2782,11 @@ fn run_audit_and_write(args: AuditArgs) -> anyhow::Result<()> {
     // Auto-update badge if agent/badge.toml is present and this is a full
     // non-advisory audit. Advisory required/fast gates must not rewrite
     // committed badge files; `jankurai badge` is the explicit writer.
-    if !args.no_badge && !changed_fast_effective && mode != AuditMode::Advisory {
-        if let Err(e) = badge::run_from_config_after_audit(&args.repo, &args.json, &args.md) {
-            eprintln!(
-                "{}",
-                jankurai::ui::epaint(
-                    jankurai::ui::Style::Warn,
-                    format!("badge update skipped: {e}")
-                )
-            );
-        }
+    if !args.read_only && !args.no_badge && !changed_fast_effective && mode != AuditMode::Advisory {
+        badge::run_from_config_after_audit(&args.repo, &args.json, &args.md)?;
     }
-    if save_smart_state {
-        let _ = jankurai::audit::smart_scan::save_state(&args.repo, &report);
+    if save_smart_state && !args.read_only {
+        jankurai::audit::smart_scan::save_state(&args.repo, &report)?;
     }
     let outcome = outcome::enforce(&report);
     let verdict = if outcome.is_err() {

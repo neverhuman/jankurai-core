@@ -22,18 +22,21 @@ pub fn compare_report_to_baseline(report: &Report, baseline_path: &Path) -> Resu
     }
     let baseline = crate::strict_json::from_slice(&bytes)
         .with_context(|| format!("parse ratchet baseline {}", baseline_path.display()))?;
+    compare_report_to_value(report, &baseline)
+}
 
-    let baseline_score = required_i32(&baseline, "score")?;
+pub(crate) fn compare_report_to_value(report: &Report, baseline: &Value) -> Result<ReportRatchet> {
+    let baseline_score = required_i32(baseline, "score")?;
     if !(0..=100).contains(&baseline_score) || !(0..=100).contains(&report.score) {
         bail!("ratchet scores must be integers from 0 through 100");
     }
-    let baseline_report_fingerprint = required_fingerprint(&baseline, "report_fingerprint")?;
-    let baseline_input_fingerprint = required_fingerprint(&baseline, "input_fingerprint")?;
-    let baseline_policy_fingerprint = required_fingerprint(&baseline, "policy_fingerprint")?;
-    let baseline_schema_version = required_string(&baseline, "schema_version")?;
-    let baseline_standard_version = required_string(&baseline, "standard_version")?;
-    let baseline_caps = required_string_set(&baseline, "caps_applied")?;
-    let baseline_findings = required_hard_finding_fingerprints(&baseline)?;
+    let baseline_report_fingerprint = required_fingerprint(baseline, "report_fingerprint")?;
+    let baseline_input_fingerprint = required_fingerprint(baseline, "input_fingerprint")?;
+    let baseline_policy_fingerprint = required_fingerprint(baseline, "policy_fingerprint")?;
+    let baseline_schema_version = required_string(baseline, "schema_version")?;
+    let baseline_standard_version = required_string(baseline, "standard_version")?;
+    let baseline_caps = required_string_set(baseline, "caps_applied")?;
+    let baseline_findings = required_hard_finding_fingerprints(baseline)?;
 
     let current_caps = report.caps_applied.iter().cloned().collect::<BTreeSet<_>>();
     let current_findings = report
@@ -52,7 +55,7 @@ pub fn compare_report_to_baseline(report: &Report, baseline_path: &Path) -> Resu
         .cloned()
         .collect::<Vec<_>>();
     let policy_changed = baseline_policy_fingerprint != report.policy_fingerprint
-        && !super::outcome::matches_legacy_policy(report, &baseline)?;
+        && !super::outcome::matches_legacy_policy(report, baseline)?;
     let version_compatible = baseline_schema_version == report.schema_version
         && baseline_standard_version == report.standard_version;
     let score_delta = report.score - baseline_score;

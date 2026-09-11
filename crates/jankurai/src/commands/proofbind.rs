@@ -50,13 +50,22 @@ fn write_outputs(mut args: ProofBindMapArgs) -> Result<()> {
     if let Some(base) = args.changed_from.as_deref() {
         args.changed_from = Some(crate::audit::verified_git_comparison(&args.repo, base)?.0);
     }
-    let output = build_proofbind(ProofBindRequest {
+    let imports = super::witness::load_proof_receipts(&args.repo, Some(&args.proof_receipts))?;
+    let mut output = build_proofbind(ProofBindRequest {
         repo_root: args.repo.clone(),
         changed_paths: args.changed,
         changed_from: args.changed_from,
         mode,
-        proof_receipts: Some(PathBuf::from(&args.proof_receipts)),
+        // The pinned legacy library does not distinguish imported claims from
+        // execution authority. Never pass file claims into its matcher.
+        proof_receipts: None,
     })?;
+    if !imports.is_empty() {
+        output.markdown.push_str(&format!(
+            "\nImported receipts: {} (unverified; diagnostic only, no proof coverage).\n",
+            imports.len()
+        ));
+    }
     ensure_parent(&args.out)?;
     ensure_parent(&args.obligations_out)?;
     ensure_parent(&args.md)?;

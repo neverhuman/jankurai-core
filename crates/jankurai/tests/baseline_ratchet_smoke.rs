@@ -92,6 +92,58 @@ fn baseline_missing_score_errors_instead_of_falling_back() {
 }
 
 #[test]
+fn witness_uses_the_same_strict_baseline_comparison_as_audit() {
+    use jankurai::commands::witness::{build_witness, WitnessArgs};
+    let repo = tempdir().unwrap();
+    let evidence = tempdir().unwrap();
+    write_pass_repo(repo.path());
+    let baseline = evidence.path().join("baseline.json");
+    let original = write_report_baseline(repo.path(), &baseline);
+    let args = WitnessArgs {
+        repo: repo.path().to_path_buf(),
+        changed: vec!["README.md".into()],
+        changed_from: None,
+        baseline: Some(baseline.to_string_lossy().into_owned()),
+        proof_receipts: None,
+        out: evidence
+            .path()
+            .join("witness.json")
+            .to_string_lossy()
+            .into_owned(),
+        md: evidence
+            .path()
+            .join("witness.md")
+            .to_string_lossy()
+            .into_owned(),
+    };
+    let unchanged = build_witness(&args).unwrap();
+    assert_eq!(
+        unchanged.baseline_score,
+        original["score"].as_i64().map(|score| score as i32)
+    );
+    assert_ne!(unchanged.decision, "ratchet_fail");
+    for value in [
+        serde_json::json!({}),
+        serde_json::json!({"score": u64::MAX}),
+    ] {
+        fs::write(&baseline, value.to_string()).unwrap();
+        assert!(build_witness(&args).is_err());
+    }
+    for (field, value) in [
+        (
+            "policy_fingerprint",
+            serde_json::json!(format!("sha256:{}", "1".repeat(64))),
+        ),
+        ("schema_version", serde_json::json!("incompatible")),
+    ] {
+        let mut changed = original.clone();
+        changed[field] = value;
+        fs::write(&baseline, changed.to_string()).unwrap();
+        assert_eq!(build_witness(&args).unwrap().decision, "ratchet_fail");
+    }
+}
+
+#[test]
 fn score_regression_fails_ratchet() {
     let repo = tempdir().unwrap();
     write_pass_repo(repo.path());
