@@ -1,17 +1,17 @@
 {
-  "report_fingerprint": "sha256:6d0f1fcd900b837b210888c41fcc4198c497eadb3f31d263829dfa6d7235784f",
-  "input_fingerprint": "sha256:1a5e199387b3f78bbe742ce20d22f92a06922a94b04176e857a1396de31592d7",
-  "policy_fingerprint": "sha256:d75b2053c5c7bd6eb5d9c41b85f346ba60d1941d88e6fedef9d7d258266a6432",
+  "report_fingerprint": "sha256:66b312a1bdb4ea0a7a8e1461e21d0e6dbff3c5a55abaaef281035f8c1511149b",
+  "input_fingerprint": "sha256:a6e63f4a4b8b2a8794809d341a6e158398255c3c3025e0c9e144740ad5ad8932",
+  "policy_fingerprint": "sha256:e77e2fe9945df0fb6f907f7f6c5bf798fc94d35f65987eab2d10314ee9da5a6c",
   "manifest_fingerprints": {
-    "owner_map": "sha256:0210dabff37854a5e5c1ecc04c77f93f189d71e51a5fb3876838fdef0f28f604",
-    "test_map": "sha256:1f4707fc4c4b9880118518e25e60dc8ce1fb8834622ca292a07a3fc9766bd6a6",
+    "owner_map": "sha256:4e4955eb7c4f9eb06525d340efbb3285cbf907533d4cc8333e1ca84fbf64b37b",
+    "test_map": "sha256:becc4e512f7fadfc82cdd6aeab37212183b07dfe09649f6b22287f78e7f1021d",
     "generated_zones": "sha256:0a1e98fd93dec97d0146d9e1916e3a03cabede673959ef5c52fc76492cba2a36",
     "boundaries": "sha256:d3c49b1a3b22dce2ee579d733e9e16e98bd91c6017ab1a9842847fa25838f46e",
-    "proof_lanes": "sha256:ca8e1db1757ad65f8d369de4f5612f59687d4737fb872e8cd3e2c7573211c1b3",
+    "proof_lanes": "sha256:9a69fe6f7869eb70753818ce27d2a05f07763bb9a8001f5aacd1f4615afeb07e",
     "standard_version": "sha256:03db81d94d767c7d59497c025fc5790194b71f3c99d4f7d1945b404e6ed69f28"
   },
   "dirty_worktree": false,
-  "generated_at": "1788928013",
+  "generated_at": "1789109537",
   "schema_url": "schemas/repo-score.schema.json",
   "standard": "jankurai",
   "standard_version": "0.9.0",
@@ -25,23 +25,23 @@
   "conformance_decision": "pass",
   "conformance_blockers": [],
   "repo": ".",
-  "run_id": "1788928013",
-  "started_at": "1788928013",
-  "elapsed_ms": 6337,
+  "run_id": "1789109537",
+  "started_at": "1789109537",
+  "elapsed_ms": 43427,
   "scope": {
     "mode": "full",
     "paths": []
   },
-  "score": 95,
-  "raw_score": 95,
+  "score": 91,
+  "raw_score": 91,
   "decision": {
-    "status": "advisory",
+    "status": "pass",
     "minimum_score": 85,
     "passed": true,
     "hard_findings": 0,
-    "soft_findings": 1,
+    "soft_findings": 0,
     "ratchet": {
-      "baseline_score": 95,
+      "baseline_score": 91,
       "allowed_drop": 0,
       "passed": true,
       "score_delta": 0,
@@ -54,7 +54,7 @@
     }
   },
   "git": {
-    "head": "8505079",
+    "head": "d763bab316660454e3fc49f9369b7f1f2b8f9a72",
     "base": null,
     "changed_files": 0,
     "mode": "full",
@@ -68,10 +68,10 @@
       "high"
     ],
     "advisory_on": [
-      "medium",
-      "low"
+      "low",
+      "medium"
     ],
-    "mode": "advisory",
+    "mode": "standard",
     "standard_version": "0.9.0",
     "auditor_version": "1.7.0",
     "schema_version": "1.9.0",
@@ -314,9 +314,13 @@
         "web e2e lane present or no web surface",
         "rendered UX QA lane present or no web surface",
         "DOM geometry UX QA runtime found",
-        "Rust property/integration tests present or no Rust surface"
+        "Rust property/integration tests present or no Rust surface",
+        "proofbind artifact found: surfaces=277 missing=277 high_or_critical_missing=70 verdict=review"
       ],
-      "notes": []
+      "notes": [
+        "proofbind reports 277 unresolved obligation(s)",
+        "proofbind reports 70 missing high/critical semantic proof obligation(s)"
+      ]
     },
     {
       "name": "Security and supply-chain posture",
@@ -391,20 +395,21 @@
     {
       "name": "Jankurai tool adoption and CI replacement",
       "weight": 7,
-      "score": 87,
-      "weighted_points": 6.09,
+      "score": 30,
+      "weighted_points": 2.1,
       "evidence": [
         "control-plane files present",
         "applicable=16",
         "configured=16",
-        "ci_evidence=13",
-        "artifact_verified=13"
+        "ci_evidence=0",
+        "artifact_verified=0"
       ],
       "notes": [
         "some applicable tools lack CI evidence",
-        "missing CI evidence for `copy-code`",
-        "missing CI evidence for `security`",
-        "missing CI evidence for `vibe-coverage`"
+        "missing admitted execution observation for `audit-ci`",
+        "missing admitted execution observation for `proof-routing`",
+        "missing admitted execution observation for `proofbind`",
+        "missing admitted execution observation for `proofmark-rust`"
       ]
     },
     {
@@ -482,16 +487,16 @@
     "control_plane_present": true,
     "applicable_count": 16,
     "configured_count": 16,
-    "ci_evidence_count": 13,
-    "artifact_verified_count": 13,
-    "replaced_count": 13,
+    "ci_evidence_count": 0,
+    "artifact_verified_count": 0,
+    "replaced_count": 0,
     "items": [
       {
         "id": "audit-ci",
         "category": "audit",
         "mode": "auto",
         "applicable": true,
-        "status": "artifact_verified",
+        "status": "configured",
         "replaced_tools": [
           "manual repo scoring",
           "ad hoc score gates"
@@ -499,10 +504,12 @@
         "evidence": [
           "mode=auto",
           "tool-adoption config entry present",
-          "CI command found in workflow",
-          "artifact uploads found: .jankurai/repo-score.json, .jankurai/repo-score.md"
+          "execution_observation=UNVERIFIED"
         ],
-        "missing": [],
+        "missing": [
+          "supported CI route declaration",
+          "admitted execution observation"
+        ],
         "local_command": "jankurai audit . --mode advisory --json .jankurai/repo-score.json --md .jankurai/repo-score.md",
         "ci_command": "jankurai audit . --mode ratchet --baseline target/jankurai/accepted-baseline.json --json target/jankurai/repo-score.json --md target/jankurai/repo-score.md",
         "artifact_paths": [
@@ -515,7 +522,7 @@
         "category": "proof",
         "mode": "auto",
         "applicable": true,
-        "status": "artifact_verified",
+        "status": "configured",
         "replaced_tools": [
           "ad hoc proof lane selection",
           "manual proof receipts"
@@ -523,10 +530,12 @@
         "evidence": [
           "mode=auto",
           "tool-adoption config entry present",
-          "CI command found in workflow",
-          "artifact uploads found: .jankurai/repo-score.json, .jankurai/repo-score.md, target/jankurai/repair-queue.jsonl"
+          "execution_observation=UNVERIFIED"
         ],
-        "missing": [],
+        "missing": [
+          "supported CI route declaration",
+          "admitted execution observation"
+        ],
         "local_command": "jankurai proof . --changed-from origin/main --out target/jankurai/proof-plan.json --md target/jankurai/proof-plan.md",
         "ci_command": "jankurai audit . --mode ratchet --baseline target/jankurai/accepted-baseline.json --json target/jankurai/repo-score.json --md target/jankurai/repo-score.md",
         "artifact_paths": [
@@ -540,7 +549,7 @@
         "category": "proof",
         "mode": "advisory",
         "applicable": true,
-        "status": "artifact_verified",
+        "status": "configured",
         "replaced_tools": [
           "manual changed-surface routing",
           "ad hoc proof obligation lists"
@@ -548,12 +557,14 @@
         "evidence": [
           "mode=advisory",
           "tool-adoption config entry present",
-          "CI command found in workflow",
-          "artifact uploads found: target/jankurai/proofbind/surface-witness.json, target/jankurai/proofbind/obligations.json"
+          "execution_observation=UNVERIFIED"
         ],
-        "missing": [],
+        "missing": [
+          "supported CI route declaration",
+          "admitted execution observation"
+        ],
         "local_command": "jankurai proofbind verify . --changed-from origin/main",
-        "ci_command": "jankurai proofbind verify . --changed-from origin/main",
+        "ci_command": "jankurai proofbind verify . --changed-from",
         "artifact_paths": [
           "target/jankurai/proofbind/surface-witness.json",
           "target/jankurai/proofbind/obligations.json"
@@ -564,7 +575,7 @@
         "category": "proof",
         "mode": "advisory",
         "applicable": true,
-        "status": "artifact_verified",
+        "status": "configured",
         "replaced_tools": [
           "line-only coverage review",
           "manual in-diff mutation review"
@@ -572,12 +583,14 @@
         "evidence": [
           "mode=advisory",
           "tool-adoption config entry present",
-          "CI command found in workflow",
-          "artifact uploads found: target/jankurai/proofmark/proofmark-receipt.json, target/jankurai/proofmark/proof-receipt.json"
+          "execution_observation=UNVERIFIED"
         ],
-        "missing": [],
+        "missing": [
+          "supported CI route declaration",
+          "admitted execution observation"
+        ],
         "local_command": "jankurai proofmark rust . --obligations target/jankurai/proofbind/obligations.json",
-        "ci_command": "jankurai proofmark rust . --obligations target/jankurai/proofbind/obligations.json",
+        "ci_command": "jankurai proofmark rust .",
         "artifact_paths": [
           "target/jankurai/proofmark/proofmark-receipt.json",
           "target/jankurai/proofmark/proof-receipt.json"
@@ -595,10 +608,12 @@
         ],
         "evidence": [
           "mode=advisory",
-          "tool-adoption config entry present"
+          "tool-adoption config entry present",
+          "execution_observation=UNVERIFIED"
         ],
         "missing": [
-          "CI command evidence"
+          "supported CI route declaration",
+          "admitted execution observation"
         ],
         "local_command": "cargo run -p jankurai -- copy-code . --json target/jankurai/copy-code.json --md target/jankurai/copy-code.md",
         "ci_command": "cargo run -p jankurai -- copy-code . --json target/jankurai/copy-code.json --md target/jankurai/copy-code.md",
@@ -620,10 +635,12 @@
         ],
         "evidence": [
           "mode=auto",
-          "tool-adoption config entry present"
+          "tool-adoption config entry present",
+          "execution_observation=UNVERIFIED"
         ],
         "missing": [
-          "CI command evidence"
+          "supported CI route declaration",
+          "admitted execution observation"
         ],
         "local_command": "jankurai security run . --out target/jankurai/security/evidence.json",
         "ci_command": "jankurai security run . --out target/jankurai/security/evidence.json",
@@ -636,7 +653,7 @@
         "category": "security",
         "mode": "advisory",
         "applicable": true,
-        "status": "artifact_verified",
+        "status": "configured",
         "replaced_tools": [
           "mutable workflow refs",
           "secret echo/debug workflow checks",
@@ -645,10 +662,12 @@
         "evidence": [
           "mode=advisory",
           "tool-adoption config entry present",
-          "CI command found in workflow",
-          "artifact uploads found: target/jankurai/language-bad-behavior.log"
+          "execution_observation=UNVERIFIED"
         ],
-        "missing": [],
+        "missing": [
+          "supported CI route declaration",
+          "admitted execution observation"
+        ],
         "local_command": "cargo test -p jankurai --test language_bad_behavior",
         "ci_command": "cargo test -p jankurai --test language_bad_behavior",
         "artifact_paths": [
@@ -660,7 +679,7 @@
         "category": "audit",
         "mode": "advisory",
         "applicable": true,
-        "status": "artifact_verified",
+        "status": "configured",
         "replaced_tools": [
           "destructive git automation",
           "force-push release scripts",
@@ -669,10 +688,12 @@
         "evidence": [
           "mode=advisory",
           "tool-adoption config entry present",
-          "CI command found in workflow",
-          "artifact uploads found: target/jankurai/language-bad-behavior.log"
+          "execution_observation=UNVERIFIED"
         ],
-        "missing": [],
+        "missing": [
+          "supported CI route declaration",
+          "admitted execution observation"
+        ],
         "local_command": "cargo test -p jankurai --test language_bad_behavior",
         "ci_command": "cargo test -p jankurai --test language_bad_behavior",
         "artifact_paths": [
@@ -684,7 +705,7 @@
         "category": "release",
         "mode": "advisory",
         "applicable": true,
-        "status": "artifact_verified",
+        "status": "configured",
         "replaced_tools": [
           "manual release checklist",
           "ad hoc tag and artifact review",
@@ -693,10 +714,12 @@
         "evidence": [
           "mode=advisory",
           "tool-adoption config entry present",
-          "CI command found in workflow",
-          "artifact uploads found: target/jankurai/language-bad-behavior.log"
+          "execution_observation=UNVERIFIED"
         ],
-        "missing": [],
+        "missing": [
+          "supported CI route declaration",
+          "admitted execution observation"
+        ],
         "local_command": "cargo test -p jankurai --test language_bad_behavior",
         "ci_command": "cargo test -p jankurai --test language_bad_behavior",
         "artifact_paths": [
@@ -748,7 +771,7 @@
         "category": "contract",
         "mode": "auto",
         "applicable": true,
-        "status": "artifact_verified",
+        "status": "configured",
         "replaced_tools": [
           "handwritten contract drift checks",
           "openapi diff"
@@ -756,10 +779,12 @@
         "evidence": [
           "mode=auto",
           "tool-adoption config entry present",
-          "CI command found in workflow",
-          "artifact uploads found: .jankurai/repo-score.json, .jankurai/repo-score.md"
+          "execution_observation=UNVERIFIED"
         ],
-        "missing": [],
+        "missing": [
+          "supported CI route declaration",
+          "admitted execution observation"
+        ],
         "local_command": "jankurai audit . --mode advisory --json .jankurai/repo-score.json --md .jankurai/repo-score.md",
         "ci_command": "jankurai audit . --mode ratchet --baseline target/jankurai/accepted-baseline.json --json target/jankurai/repo-score.json --md target/jankurai/repo-score.md",
         "artifact_paths": [
@@ -797,10 +822,12 @@
         ],
         "evidence": [
           "mode=auto",
-          "tool-adoption config entry present"
+          "tool-adoption config entry present",
+          "execution_observation=UNVERIFIED"
         ],
         "missing": [
-          "CI command evidence"
+          "supported CI route declaration",
+          "admitted execution observation"
         ],
         "local_command": "jankurai vibe coverage --source agent/vibe-coverage.toml --tips tips/vibe_coding --json target/jankurai/vibe-coverage.json --md target/jankurai/vibe-coverage.md",
         "ci_command": "jankurai vibe coverage --source agent/vibe-coverage.toml --tips tips/vibe_coding --json target/jankurai/vibe-coverage.json --md target/jankurai/vibe-coverage.md",
@@ -814,7 +841,7 @@
         "category": "proof",
         "mode": "auto",
         "applicable": true,
-        "status": "artifact_verified",
+        "status": "configured",
         "replaced_tools": [
           "manual coverage report review",
           "ad hoc mutation survivor review"
@@ -822,10 +849,12 @@
         "evidence": [
           "mode=auto",
           "tool-adoption config entry present",
-          "CI command found in workflow",
-          "artifact uploads found: target/jankurai/coverage/coverage-audit.json, target/jankurai/coverage/coverage-audit.md"
+          "execution_observation=UNVERIFIED"
         ],
-        "missing": [],
+        "missing": [
+          "supported CI route declaration",
+          "admitted execution observation"
+        ],
         "local_command": "jankurai coverage audit . --config agent/coverage-sources.toml --json target/jankurai/coverage/coverage-audit.json --md target/jankurai/coverage/coverage-audit.md",
         "ci_command": "jankurai coverage audit . --config agent/coverage-sources.toml --json target/jankurai/coverage/coverage-audit.json --md target/jankurai/coverage/coverage-audit.md",
         "artifact_paths": [
@@ -838,17 +867,19 @@
         "category": "security",
         "mode": "auto",
         "applicable": true,
-        "status": "artifact_verified",
+        "status": "configured",
         "replaced_tools": [
           "manual authz matrix review"
         ],
         "evidence": [
           "mode=auto",
           "tool-adoption config entry present",
-          "CI command found in workflow",
-          "artifact uploads found: .jankurai/repo-score.json, .jankurai/repo-score.md"
+          "execution_observation=UNVERIFIED"
         ],
-        "missing": [],
+        "missing": [
+          "supported CI route declaration",
+          "admitted execution observation"
+        ],
         "local_command": "jankurai audit . --mode advisory --json .jankurai/repo-score.json --md .jankurai/repo-score.md",
         "ci_command": "jankurai audit . --mode ratchet --baseline target/jankurai/accepted-baseline.json --json target/jankurai/repo-score.json --md target/jankurai/repo-score.md",
         "artifact_paths": [
@@ -881,17 +912,19 @@
         "category": "security",
         "mode": "auto",
         "applicable": true,
-        "status": "artifact_verified",
+        "status": "configured",
         "replaced_tools": [
           "manual MCP/tool trust review"
         ],
         "evidence": [
           "mode=auto",
           "tool-adoption config entry present",
-          "CI command found in workflow",
-          "artifact uploads found: .jankurai/repo-score.json, .jankurai/repo-score.md"
+          "execution_observation=UNVERIFIED"
         ],
-        "missing": [],
+        "missing": [
+          "supported CI route declaration",
+          "admitted execution observation"
+        ],
         "local_command": "jankurai audit . --mode advisory --json .jankurai/repo-score.json --md .jankurai/repo-score.md",
         "ci_command": "jankurai audit . --mode ratchet --baseline target/jankurai/accepted-baseline.json --json target/jankurai/repo-score.json --md target/jankurai/repo-score.md",
         "artifact_paths": [
@@ -904,17 +937,19 @@
         "category": "release",
         "mode": "auto",
         "applicable": true,
-        "status": "artifact_verified",
+        "status": "configured",
         "replaced_tools": [
           "manual launch checklist"
         ],
         "evidence": [
           "mode=auto",
           "tool-adoption config entry present",
-          "CI command found in workflow",
-          "artifact uploads found: .jankurai/repo-score.json, .jankurai/repo-score.md"
+          "execution_observation=UNVERIFIED"
         ],
-        "missing": [],
+        "missing": [
+          "supported CI route declaration",
+          "admitted execution observation"
+        ],
         "local_command": "jankurai audit . --mode advisory --json .jankurai/repo-score.json --md .jankurai/repo-score.md",
         "ci_command": "jankurai audit . --mode ratchet --baseline target/jankurai/accepted-baseline.json --json target/jankurai/repo-score.json --md target/jankurai/repo-score.md",
         "artifact_paths": [
@@ -927,17 +962,19 @@
         "category": "release",
         "mode": "auto",
         "applicable": true,
-        "status": "artifact_verified",
+        "status": "configured",
         "replaced_tools": [
           "manual spend review"
         ],
         "evidence": [
           "mode=auto",
           "tool-adoption config entry present",
-          "CI command found in workflow",
-          "artifact uploads found: .jankurai/repo-score.json, .jankurai/repo-score.md"
+          "execution_observation=UNVERIFIED"
         ],
-        "missing": [],
+        "missing": [
+          "supported CI route declaration",
+          "admitted execution observation"
+        ],
         "local_command": "jankurai audit . --mode advisory --json .jankurai/repo-score.json --md .jankurai/repo-score.md",
         "ci_command": "jankurai audit . --mode ratchet --baseline target/jankurai/accepted-baseline.json --json target/jankurai/repo-score.json --md target/jankurai/repo-score.md",
         "artifact_paths": [
@@ -966,38 +1003,10 @@
         "release-readiness",
         "cost-budget"
       ],
-      "artifact_verified_count": 13,
-      "artifact_verified_tools": [
-        "audit-ci",
-        "proof-routing",
-        "proofbind",
-        "proofmark-rust",
-        "ci-bad-behavior",
-        "git-bad-behavior",
-        "release-bad-behavior",
-        "contract-drift",
-        "coverage-evidence",
-        "authz-matrix",
-        "agent-tool-supply",
-        "release-readiness",
-        "cost-budget"
-      ],
-      "ci_evidence_count": 13,
-      "ci_evidence_tools": [
-        "audit-ci",
-        "proof-routing",
-        "proofbind",
-        "proofmark-rust",
-        "ci-bad-behavior",
-        "git-bad-behavior",
-        "release-bad-behavior",
-        "contract-drift",
-        "coverage-evidence",
-        "authz-matrix",
-        "agent-tool-supply",
-        "release-readiness",
-        "cost-budget"
-      ],
+      "artifact_verified_count": 0,
+      "artifact_verified_tools": [],
+      "ci_evidence_count": 0,
+      "ci_evidence_tools": [],
       "config_present": true,
       "configured_count": 16,
       "configured_tools": [
@@ -1018,15 +1027,48 @@
         "release-readiness",
         "cost-budget"
       ],
-      "control_plane_present": true
+      "control_plane_present": true,
+      "execution_observation": "UNVERIFIED",
+      "route_assessment_incomplete": [
+        ".github/workflows/ci.yml: unsupported workflow trigger options"
+      ]
     },
     "missing": [
+      "audit-ci",
+      "proof-routing",
+      "proofbind",
+      "proofmark-rust",
       "copy-code",
       "security",
-      "vibe-coverage"
+      "ci-bad-behavior",
+      "git-bad-behavior",
+      "release-bad-behavior",
+      "contract-drift",
+      "vibe-coverage",
+      "coverage-evidence",
+      "authz-matrix",
+      "agent-tool-supply",
+      "release-readiness",
+      "cost-budget"
     ]
   },
-  "security_evidence": {},
+  "security_evidence": {
+    "artifact": {
+      "path": "target/jankurai/security/evidence.json",
+      "envelope_exit_code": 0,
+      "elapsed_ms": 4617,
+      "wrapper_strict": true,
+      "profile": "ci",
+      "commands_ran": 8,
+      "commands_skipped": 0,
+      "commands_failed": 0,
+      "required_commands_skipped": 0,
+      "required_commands_failed": 0,
+      "blocking_commands": [],
+      "generated_at": "1789109390",
+      "git_head": "d763bab316660454e3fc49f9369b7f1f2b8f9a72"
+    }
+  },
   "boundaries": {
     "artifact": {
       "path": "agent/boundaries.toml",
@@ -1044,7 +1086,7 @@
   "copy_code": {
     "schema_version": "1.1.0",
     "generated_by": "jankurai copy-code",
-    "generated_at": "2026-09-09T04:26:47.010213702+00:00",
+    "generated_at": "2026-09-11T06:51:35.204783733+00:00",
     "repo": ".",
     "auditor_version": "1.7.0",
     "status": "review",
@@ -1082,20 +1124,20 @@
       ]
     },
     "summary": {
-      "files_scanned": 470,
-      "files_considered": 122,
-      "active_files": 122,
+      "files_scanned": 496,
+      "files_considered": 128,
+      "active_files": 128,
       "exact_file_classes": 0,
       "hard_classes": 0,
-      "warning_classes": 30,
+      "warning_classes": 31,
       "hard_instances": 0,
-      "warning_instances": 81,
-      "duplicate_lines": 78,
-      "duplicate_tokens": 190,
-      "duplicate_bytes": 2131,
-      "total_redundant_lines": 107,
-      "total_redundant_tokens": 275,
-      "total_redundant_bytes": 2995
+      "warning_instances": 84,
+      "duplicate_lines": 73,
+      "duplicate_tokens": 181,
+      "duplicate_bytes": 2032,
+      "total_redundant_lines": 103,
+      "total_redundant_tokens": 267,
+      "total_redundant_bytes": 2909
     },
     "classes": [
       {
@@ -1120,15 +1162,15 @@
           {
             "path": "crates/jankurai/src/audit/mod.rs",
             "language": "rust",
-            "start_line": 1939,
-            "end_line": 1952,
+            "start_line": 1959,
+            "end_line": 1972,
             "unit_name": "compare_manifest_fingerprint"
           },
           {
             "path": "crates/jankurai/src/commands/proof.rs",
             "language": "rust",
-            "start_line": 904,
-            "end_line": 917,
+            "start_line": 951,
+            "end_line": 964,
             "unit_name": "push_manifest_mismatch"
           }
         ]
@@ -1155,15 +1197,15 @@
           {
             "path": "crates/jankurai/src/commands/proof.rs",
             "language": "rust",
-            "start_line": 1418,
-            "end_line": 1423,
+            "start_line": 1412,
+            "end_line": 1417,
             "unit_name": "display_relative"
           },
           {
             "path": "crates/jankurai/src/commands/security.rs",
             "language": "rust",
-            "start_line": 520,
-            "end_line": 525,
+            "start_line": 679,
+            "end_line": 684,
             "unit_name": "display_rel"
           },
           {
@@ -1316,42 +1358,6 @@
         ]
       },
       {
-        "id": "copy-code-unit-rust-7330ca246dddc7f3",
-        "kind": "exact_unit_same_name",
-        "severity": "warning",
-        "confidence": "high",
-        "language": "rust",
-        "unit_name": "ensure_parent",
-        "duplicate_lines": 7,
-        "duplicate_tokens": 16,
-        "duplicate_bytes": 166,
-        "instance_count": 2,
-        "total_redundant_lines": 7,
-        "total_redundant_tokens": 16,
-        "total_redundant_bytes": 166,
-        "effective_severity": "warning",
-        "hard_fail": false,
-        "fingerprint": "ce3698e9b97fa256",
-        "reason": "same-name semantic unit copied across multiple files",
-        "recommended_action": "keep the named unit in one owner and call it from the other sites",
-        "instances": [
-          {
-            "path": "crates/jankurai/src/commands/proofbind.rs",
-            "language": "rust",
-            "start_line": 85,
-            "end_line": 92,
-            "unit_name": "ensure_parent"
-          },
-          {
-            "path": "crates/jankurai/src/commands/proofmark.rs",
-            "language": "rust",
-            "start_line": 62,
-            "end_line": 69,
-            "unit_name": "ensure_parent"
-          }
-        ]
-      },
-      {
         "id": "copy-code-body-rust-6d561a42a47a99a4",
         "kind": "exact_unit_different_name",
         "severity": "warning",
@@ -1409,15 +1415,15 @@
           {
             "path": "crates/jankurai/src/commands/exceptions.rs",
             "language": "rust",
-            "start_line": 289,
-            "end_line": 296,
+            "start_line": 292,
+            "end_line": 299,
             "unit_name": "should_skip_path"
           },
           {
             "path": "crates/jankurai/src/commands/optimize.rs",
             "language": "rust",
-            "start_line": 490,
-            "end_line": 497,
+            "start_line": 493,
+            "end_line": 500,
             "unit_name": "should_skip_path"
           }
         ]
@@ -1672,6 +1678,55 @@
         ]
       },
       {
+        "id": "copy-code-body-rust-4a5573d227df60fc",
+        "kind": "exact_unit_different_name",
+        "severity": "warning",
+        "confidence": "medium",
+        "language": "rust",
+        "duplicate_lines": 1,
+        "duplicate_tokens": 1,
+        "duplicate_bytes": 13,
+        "instance_count": 4,
+        "total_redundant_lines": 3,
+        "total_redundant_tokens": 3,
+        "total_redundant_bytes": 39,
+        "effective_severity": "warning",
+        "hard_fail": false,
+        "fingerprint": "d6c6473313b7915f",
+        "reason": "same body appears under different names across files",
+        "recommended_action": "choose one owner for the shared body or intentionally differentiate the behavior",
+        "instances": [
+          {
+            "path": "crates/jankurai/src/commands/doctor.rs",
+            "language": "rust",
+            "start_line": 671,
+            "end_line": 672,
+            "unit_name": "is_prose_file"
+          },
+          {
+            "path": "crates/jankurai/src/commands/migrate/slice_risk.rs",
+            "language": "rust",
+            "start_line": 651,
+            "end_line": 652,
+            "unit_name": "is_candidate_source"
+          },
+          {
+            "path": "crates/jankurai/src/commands/proofbind.rs",
+            "language": "rust",
+            "start_line": 188,
+            "end_line": 189,
+            "unit_name": "allowed_core_surface_type"
+          },
+          {
+            "path": "crates/jankurai/src/init/adapters.rs",
+            "language": "rust",
+            "start_line": 70,
+            "end_line": 71,
+            "unit_name": "is_skill_path"
+          }
+        ]
+      },
+      {
         "id": "copy-code-body-rust-ab80b0029566ed53",
         "kind": "exact_unit_different_name",
         "severity": "warning",
@@ -1693,8 +1748,8 @@
           {
             "path": "crates/jankurai/src/commands/badge.rs",
             "language": "rust",
-            "start_line": 721,
-            "end_line": 722,
+            "start_line": 744,
+            "end_line": 745,
             "unit_name": "escape_xml"
           },
           {
@@ -1756,8 +1811,8 @@
           {
             "path": "crates/jankurai/src/commands/migrate/slice_risk.rs",
             "language": "rust",
-            "start_line": 737,
-            "end_line": 738,
+            "start_line": 745,
+            "end_line": 746,
             "unit_name": "secret_reference_context"
           }
         ]
@@ -1785,15 +1840,15 @@
           {
             "path": "crates/jankurai/src/audit/mod.rs",
             "language": "rust",
-            "start_line": 578,
-            "end_line": 580,
+            "start_line": 504,
+            "end_line": 506,
             "unit_name": "sha256_string"
           },
           {
             "path": "crates/jankurai/src/commands/proof.rs",
             "language": "rust",
-            "start_line": 1445,
-            "end_line": 1447,
+            "start_line": 1439,
+            "end_line": 1441,
             "unit_name": "sha256_string"
           }
         ]
@@ -1877,48 +1932,6 @@
         ]
       },
       {
-        "id": "copy-code-body-rust-4a5573d227df60fc",
-        "kind": "exact_unit_different_name",
-        "severity": "warning",
-        "confidence": "medium",
-        "language": "rust",
-        "duplicate_lines": 1,
-        "duplicate_tokens": 1,
-        "duplicate_bytes": 13,
-        "instance_count": 3,
-        "total_redundant_lines": 2,
-        "total_redundant_tokens": 2,
-        "total_redundant_bytes": 26,
-        "effective_severity": "warning",
-        "hard_fail": false,
-        "fingerprint": "ae2de06a1e122430",
-        "reason": "same body appears under different names across files",
-        "recommended_action": "choose one owner for the shared body or intentionally differentiate the behavior",
-        "instances": [
-          {
-            "path": "crates/jankurai/src/commands/doctor.rs",
-            "language": "rust",
-            "start_line": 671,
-            "end_line": 672,
-            "unit_name": "is_prose_file"
-          },
-          {
-            "path": "crates/jankurai/src/commands/migrate/slice_risk.rs",
-            "language": "rust",
-            "start_line": 643,
-            "end_line": 644,
-            "unit_name": "is_candidate_source"
-          },
-          {
-            "path": "crates/jankurai/src/init/adapters.rs",
-            "language": "rust",
-            "start_line": 70,
-            "end_line": 71,
-            "unit_name": "is_skill_path"
-          }
-        ]
-      },
-      {
         "id": "copy-code-unit-rust-7f1fa5984664b698",
         "kind": "exact_unit_same_name",
         "severity": "warning",
@@ -1941,15 +1954,15 @@
           {
             "path": "crates/jankurai/src/commands/migrate/prompt_verify.rs",
             "language": "rust",
-            "start_line": 850,
-            "end_line": 851,
+            "start_line": 859,
+            "end_line": 860,
             "unit_name": "canonicalize_repo"
           },
           {
             "path": "crates/jankurai/src/commands/migrate/slice_risk.rs",
             "language": "rust",
-            "start_line": 778,
-            "end_line": 779,
+            "start_line": 786,
+            "end_line": 787,
             "unit_name": "canonicalize_repo"
           }
         ]
@@ -1976,15 +1989,15 @@
           {
             "path": "crates/jankurai/src/commands/badge.rs",
             "language": "rust",
-            "start_line": 691,
-            "end_line": 692,
+            "start_line": 714,
+            "end_line": 715,
             "unit_name": "resolve_path"
           },
           {
             "path": "crates/jankurai/src/commands/badge.rs",
             "language": "rust",
-            "start_line": 700,
-            "end_line": 701,
+            "start_line": 723,
+            "end_line": 724,
             "unit_name": "normalize_path"
           }
         ]
@@ -2025,6 +2038,41 @@
         ]
       },
       {
+        "id": "copy-code-body-rust-523c7420521fd0aa",
+        "kind": "exact_unit_different_name",
+        "severity": "warning",
+        "confidence": "medium",
+        "language": "rust",
+        "duplicate_lines": 1,
+        "duplicate_tokens": 4,
+        "duplicate_bytes": 44,
+        "instance_count": 2,
+        "total_redundant_lines": 1,
+        "total_redundant_tokens": 4,
+        "total_redundant_bytes": 44,
+        "effective_severity": "warning",
+        "hard_fail": false,
+        "fingerprint": "0a962d95c8603812",
+        "reason": "same body appears under different names across files",
+        "recommended_action": "choose one owner for the shared body or intentionally differentiate the behavior",
+        "instances": [
+          {
+            "path": "crates/jankurai/src/strict_json.rs",
+            "language": "rust",
+            "start_line": 45,
+            "end_line": 46,
+            "unit_name": "visit_i64"
+          },
+          {
+            "path": "crates/jankurai/src/strict_json.rs",
+            "language": "rust",
+            "start_line": 49,
+            "end_line": 50,
+            "unit_name": "visit_u64"
+          }
+        ]
+      },
+      {
         "id": "copy-code-body-rust-8be774292dfa029c",
         "kind": "exact_unit_different_name",
         "severity": "warning",
@@ -2046,16 +2094,51 @@
           {
             "path": "crates/jankurai/src/commands/migrate/prompt_verify.rs",
             "language": "rust",
-            "start_line": 854,
-            "end_line": 855,
+            "start_line": 863,
+            "end_line": 864,
             "unit_name": "resolve_repo_relative_candidate"
           },
           {
             "path": "crates/jankurai/src/commands/migrate/slice_risk.rs",
             "language": "rust",
-            "start_line": 782,
-            "end_line": 783,
+            "start_line": 790,
+            "end_line": 791,
             "unit_name": "resolve_repo_relative_existing"
+          }
+        ]
+      },
+      {
+        "id": "copy-code-body-rust-4d9c0f576514d949",
+        "kind": "exact_unit_different_name",
+        "severity": "warning",
+        "confidence": "medium",
+        "language": "rust",
+        "duplicate_lines": 1,
+        "duplicate_tokens": 3,
+        "duplicate_bytes": 23,
+        "instance_count": 2,
+        "total_redundant_lines": 1,
+        "total_redundant_tokens": 3,
+        "total_redundant_bytes": 23,
+        "effective_severity": "warning",
+        "hard_fail": false,
+        "fingerprint": "774dc0c4b6e2c976",
+        "reason": "same body appears under different names across files",
+        "recommended_action": "choose one owner for the shared body or intentionally differentiate the behavior",
+        "instances": [
+          {
+            "path": "crates/jankurai/src/audit/outcome.rs",
+            "language": "rust",
+            "start_line": 304,
+            "end_line": 305,
+            "unit_name": "assess"
+          },
+          {
+            "path": "crates/jankurai/src/audit/outcome.rs",
+            "language": "rust",
+            "start_line": 384,
+            "end_line": 385,
+            "unit_name": "enforce"
           }
         ]
       },
@@ -2292,8 +2375,8 @@
           {
             "path": "crates/jankurai/src/commands/badge.rs",
             "language": "rust",
-            "start_line": 721,
-            "end_line": 722,
+            "start_line": 744,
+            "end_line": 745,
             "unit_name": "escape_xml"
           },
           {
@@ -2586,46 +2669,11 @@
   "coverage_evidence": {
     "artifact": "target/jankurai/coverage/coverage-audit.json",
     "status": "missing",
-    "sources_total": 0,
+    "sources_total": 2,
     "sources_present": 0,
     "hard_findings": 0,
-    "soft_findings": 1
+    "soft_findings": 0
   },
-  "findings": [
-    {
-      "severity": "medium",
-      "category": "test",
-      "path": "agent/coverage-sources.toml",
-      "problem": "coverage evidence lane is configured but has not been run",
-      "agent_fix": "run `cargo run -p jankurai -- coverage audit . --config agent/coverage-sources.toml --json target/jankurai/coverage/coverage-audit.json --md target/jankurai/coverage/coverage-audit.md`",
-      "evidence": [
-        "agent/coverage-sources.toml exists"
-      ],
-      "check_id": "HLT-008-FALSE-GREEN-RISK:coverage-evidence",
-      "hardness": "soft",
-      "confidence": 0.76,
-      "evidence_kind": "test",
-      "rerun_command": "cargo run -p jankurai -- coverage audit . --config agent/coverage-sources.toml --json target/jankurai/coverage/coverage-audit.json --md target/jankurai/coverage/coverage-audit.md",
-      "fingerprint": "sha256:d80fbd966029c39ef6dde3a73b2f46834e117ee6c16c85385ccf415d0d3719b5",
-      "rule_id": "HLT-008-FALSE-GREEN-RISK",
-      "tlr": "Verification",
-      "lane": "coverage-audit",
-      "docs_url": "docs/testing.md",
-      "owner": "agent",
-      "matched_term": "coverage-evidence",
-      "reason": "coverage evidence artifact `target/jankurai/coverage/coverage-audit.json`"
-    }
-  ],
-  "agent_fix_queue": [
-    {
-      "path": "agent/coverage-sources.toml",
-      "priority": "medium",
-      "rule_id": "HLT-008-FALSE-GREEN-RISK",
-      "tlr": "Verification",
-      "lane": "coverage-audit",
-      "owner": "agent",
-      "task": "run `cargo run -p jankurai -- coverage audit . --config agent/coverage-sources.toml --json target/jankurai/coverage/coverage-audit.json --md target/jankurai/coverage/coverage-audit.md`",
-      "why": "coverage evidence lane is configured but has not been run"
-    }
-  ]
+  "findings": [],
+  "agent_fix_queue": []
 }

@@ -934,8 +934,8 @@ fn build_findings(
     }
 
     // AST / Graph Pilot findings
-    if !crate::audit::analyzers::ast::run_ast_pilot(ctx).is_empty() {
-        let hit = crate::audit::analyzers::ast::run_ast_pilot(ctx)[0].clone();
+    let hits = crate::audit::analyzers::ast::run_ast_pilot(ctx).unwrap_or_default();
+    if let Some(hit) = hits.first() {
         b.add(
             "high",
             "boundary",
